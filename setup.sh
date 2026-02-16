@@ -5,8 +5,8 @@ set -euo pipefail
 # Run this after cloning: ./setup.sh
 
 VOICES_DIR="${HOME}/.local/share/piper/voices"
-DEFAULT_VOICE="en_GB-alba-medium"
-VOICE_BASE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium"
+DEFAULT_VOICE="en_GB-jenny_dioco-medium"
+VOICE_BASE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/jenny_dioco/medium"
 
 echo ""
 echo "  🏰 CastleCall Setup"

@@ -1,7 +1,7 @@
 const express = require("express");
 const path = require("path");
 const { announce, getVoices, isPlaying } = require("./tts");
-const { addEntry, getHistory } = require("./history");
+const { addEntry, getHistory, getEntryById } = require("./history");
 const { loadConfig } = require("./config");
 
 const config = loadConfig();
@@ -47,7 +47,7 @@ app.post("/api/announce", async (req, res) => {
       `📢 Announcing: "${text.substring(0, 50)}${text.length > 50 ? "..." : ""}" [voice=${selectedVoice}, vol=${selectedVolume}]`
     );
 
-    const entry = addEntry(text, selectedVoice);
+    const entry = addEntry(text, selectedVoice, selectedVolume);
 
     await announce(config, {
       text: text.trim(),
@@ -59,6 +59,31 @@ app.post("/api/announce", async (req, res) => {
   } catch (err) {
     console.error("Announcement failed:", err);
     res.status(500).json({ error: "Announcement failed: " + err.message });
+  }
+});
+
+// Replay an announcement directly from history
+app.post("/api/replay/:id", async (req, res) => {
+  if (isPlaying()) {
+    return res.status(409).json({ error: "An announcement is already playing" });
+  }
+
+  const entry = getEntryById(req.params.id);
+  if (!entry) {
+    return res.status(404).json({ error: "History entry not found" });
+  }
+
+  try {
+    await announce(config, {
+      text: entry.text,
+      voice: entry.voice || config.defaultVoice,
+      volume: Math.min(100, Math.max(0, parseInt(entry.volume) || 80)),
+    });
+
+    res.json({ success: true, id: entry.id });
+  } catch (err) {
+    console.error("Replay failed:", err);
+    res.status(500).json({ error: "Replay failed: " + err.message });
   }
 });
 

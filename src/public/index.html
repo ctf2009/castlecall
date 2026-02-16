@@ -300,8 +300,9 @@
       border: 1px solid var(--border);
       border-radius: 6px;
       color: var(--text-muted);
-      padding: 4px 8px;
-      font-size: 0.7rem;
+      padding: 7px 10px;
+      font-size: 0.85rem;
+      min-width: 38px;
       cursor: pointer;
       transition: border-color 0.15s, color 0.15s;
     }
@@ -535,7 +536,7 @@
           <li class="history-item">
             <span class="history-text">${escapeHtml(h.text)}</span>
             <span class="history-meta">${timeAgo(h.timestamp)}</span>
-            <button class="history-replay" onclick="replay('${escapeHtml(h.text).replace(/'/g, "\\'")}')">\u21bb</button>
+            <button class="history-replay" onclick="replay('${h.id}')">\u21bb</button>
           </li>
         `
           )
@@ -545,11 +546,26 @@
       }
     }
 
-    // Replay a past announcement
-    window.replay = (text) => {
-      textEl.value = text;
-      textEl.dispatchEvent(new Event("input"));
-      textEl.focus();
+    // Replay a past announcement (play immediately; do not populate the text box)
+    window.replay = async (id) => {
+      btnEl.disabled = true;
+      btnEl.textContent = "🔊 Playing...";
+      btnEl.classList.add("playing");
+
+      try {
+        const res = await fetch(`/api/replay/${encodeURIComponent(id)}`, { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Failed");
+        }
+        showToast("Replayed!", "success");
+      } catch (err) {
+        showToast(err.message, "error");
+      } finally {
+        btnEl.disabled = false;
+        btnEl.textContent = "📢 Announce";
+        btnEl.classList.remove("playing");
+      }
     };
 
     // Toast notification

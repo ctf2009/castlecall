@@ -20,6 +20,10 @@ function loadConfig() {
   }
 
   const resolveHome = (p) => p.replace(/^~/, os.homedir());
+  const parseBool = (value, fallback) => {
+    if (value === undefined) return fallback;
+    return value.toLowerCase() !== "false";
+  };
 
   return {
     port: parseInt(process.env.PORT) || 3000,
@@ -27,9 +31,11 @@ function loadConfig() {
     voicesDir: resolveHome(
       process.env.VOICES_DIR || path.join(os.homedir(), ".local/share/piper/voices")
     ),
-    defaultVoice: process.env.DEFAULT_VOICE || "en_GB-alba-medium",
+    defaultVoice: process.env.DEFAULT_VOICE || "en_GB-jenny_dioco-medium",
     audioDevice: process.env.AUDIO_DEVICE || "default",
     maxTextLength: parseInt(process.env.MAX_TEXT_LENGTH) || 500,
+    cacheEnabled: parseBool(process.env.CACHE_ENABLED, true),
+    cacheMaxFiles: parseInt(process.env.CACHE_MAX_FILES) || 100,
   };
 }
 

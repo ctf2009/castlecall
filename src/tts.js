@@ -1,7 +1,10 @@
 const { spawn } = require("child_process");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+
+const CACHE_DIR = path.join(os.tmpdir(), "castlecall-cache");
 
 let currentlyPlaying = false;
 
@@ -41,109 +44,123 @@ async function getVoices(config) {
 
 /**
  * Generate speech from text using Piper and play it through speakers.
+ * Reuses cached audio for repeated text+voice combinations.
  */
 function announce(config, { text, voice, volume }) {
   return new Promise((resolve, reject) => {
     currentlyPlaying = true;
 
     const voiceModel = path.join(config.voicesDir, `${voice}.onnx`);
-
     if (!fs.existsSync(voiceModel)) {
       currentlyPlaying = false;
       return reject(new Error(`Voice model not found: ${voiceModel}`));
     }
 
-    // Create a temp file for the WAV output
-    const tmpFile = path.join(os.tmpdir(), `castlecall-${Date.now()}.wav`);
+    const useCache = config.cacheEnabled !== false;
+    const outputFile = useCache
+      ? getCacheFilePath(voice, text)
+      : path.join(os.tmpdir(), `castlecall-${Date.now()}.wav`);
 
-    // Run piper to generate WAV
+    if (useCache && fs.existsSync(outputFile)) {
+      touchFile(outputFile);
+      return playAudioFile(config, outputFile, volume, resolve, reject, false);
+    }
+
+    if (useCache) {
+      ensureCacheDir();
+    }
+
     const piper = spawn(config.piperPath, [
       "--model",
       voiceModel,
       "--output_file",
-      tmpFile,
+      outputFile,
     ]);
 
     let piperStderr = "";
-
     piper.stderr.on("data", (data) => {
       piperStderr += data.toString();
     });
 
-    // Feed text to piper's stdin
     piper.stdin.write(text);
     piper.stdin.end();
 
     piper.on("close", (code) => {
       if (code !== 0) {
         currentlyPlaying = false;
-        cleanup(tmpFile);
+        cleanup(outputFile);
         return reject(new Error(`Piper exited with code ${code}: ${piperStderr}`));
       }
 
-      if (!fs.existsSync(tmpFile)) {
+      if (!fs.existsSync(outputFile)) {
         currentlyPlaying = false;
         return reject(new Error("Piper did not produce output file"));
       }
 
-      // Play the WAV file using aplay
-      // Apply volume scaling via amixer or sox if available
-      const playArgs = [];
-
-      if (config.audioDevice !== "default") {
-        playArgs.push("-D", config.audioDevice);
+      if (useCache) {
+        touchFile(outputFile);
+        enforceCacheLimit(config.cacheMaxFiles);
       }
 
-      playArgs.push(tmpFile);
-
-      // If volume is not 100, try to use sox (play) for volume control
-      // Otherwise fall back to aplay
-      if (volume < 100) {
-        // Try sox/play first for volume control
-        const play = spawn("play", [tmpFile, "vol", (volume / 100).toFixed(2)], {
-          stdio: ["ignore", "ignore", "pipe"],
-        });
-
-        let playStderr = "";
-        play.stderr.on("data", (data) => {
-          playStderr += data.toString();
-        });
-
-        play.on("error", () => {
-          // sox not available, fall back to aplay without volume control
-          console.warn(
-            "⚠️  sox/play not found, using aplay (volume control unavailable). Install sox: sudo apt-get install sox"
-          );
-          playWithAplay(config, tmpFile, resolve, reject);
-        });
-
-        play.on("close", (playCode) => {
-          currentlyPlaying = false;
-          cleanup(tmpFile);
-          if (playCode !== 0) {
-            return reject(new Error(`play exited with code ${playCode}: ${playStderr}`));
-          }
-          resolve();
-        });
-      } else {
-        playWithAplay(config, tmpFile, resolve, reject);
-      }
+      playAudioFile(config, outputFile, volume, resolve, reject, !useCache);
     });
 
     piper.on("error", (err) => {
       currentlyPlaying = false;
-      cleanup(tmpFile);
+      cleanup(outputFile);
       reject(new Error(`Failed to run piper: ${err.message}. Is piper installed?`));
     });
   });
 }
 
-function playWithAplay(config, tmpFile, resolve, reject) {
+function playAudioFile(config, audioFile, volume, resolve, reject, cleanupOnFinish) {
+  if (volume < 100) {
+    const play = spawn("play", [audioFile, "vol", (volume / 100).toFixed(2)], {
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+
+    let playStderr = "";
+    let fallbackToAplay = false;
+
+    play.stderr.on("data", (data) => {
+      playStderr += data.toString();
+    });
+
+    play.on("error", () => {
+      fallbackToAplay = true;
+      console.warn(
+        "sox/play not found, using aplay (volume control unavailable). Install sox: sudo apt-get install sox"
+      );
+      playWithAplay(config, audioFile, resolve, reject, cleanupOnFinish);
+    });
+
+    play.on("close", (playCode) => {
+      if (fallbackToAplay) {
+        return;
+      }
+
+      currentlyPlaying = false;
+      if (cleanupOnFinish) {
+        cleanup(audioFile);
+      }
+      if (playCode !== 0) {
+        return reject(new Error(`play exited with code ${playCode}: ${playStderr}`));
+      }
+      resolve();
+    });
+
+    return;
+  }
+
+  playWithAplay(config, audioFile, resolve, reject, cleanupOnFinish);
+}
+
+function playWithAplay(config, audioFile, resolve, reject, cleanupOnFinish) {
   const aplayArgs = [];
   if (config.audioDevice !== "default") {
     aplayArgs.push("-D", config.audioDevice);
   }
-  aplayArgs.push(tmpFile);
+  aplayArgs.push(audioFile);
 
   const aplay = spawn("aplay", aplayArgs, {
     stdio: ["ignore", "ignore", "pipe"],
@@ -156,7 +173,9 @@ function playWithAplay(config, tmpFile, resolve, reject) {
 
   aplay.on("close", (code) => {
     currentlyPlaying = false;
-    cleanup(tmpFile);
+    if (cleanupOnFinish) {
+      cleanup(audioFile);
+    }
     if (code !== 0) {
       return reject(new Error(`aplay exited with code ${code}: ${aplayStderr}`));
     }
@@ -165,9 +184,58 @@ function playWithAplay(config, tmpFile, resolve, reject) {
 
   aplay.on("error", (err) => {
     currentlyPlaying = false;
-    cleanup(tmpFile);
+    if (cleanupOnFinish) {
+      cleanup(audioFile);
+    }
     reject(new Error(`Failed to run aplay: ${err.message}`));
   });
+}
+
+function getCacheFilePath(voice, text) {
+  const safeVoice = voice.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const hash = crypto.createHash("sha1").update(`${voice}\n${text}`).digest("hex");
+  return path.join(CACHE_DIR, `${safeVoice}-${hash}.wav`);
+}
+
+function ensureCacheDir() {
+  if (!fs.existsSync(CACHE_DIR)) {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+  }
+}
+
+function touchFile(filePath) {
+  try {
+    const now = new Date();
+    fs.utimesSync(filePath, now, now);
+  } catch {
+    // ignore touch errors
+  }
+}
+
+function enforceCacheLimit(maxFiles) {
+  if (!Number.isFinite(maxFiles) || maxFiles < 1 || !fs.existsSync(CACHE_DIR)) {
+    return;
+  }
+
+  try {
+    const cachedFiles = fs
+      .readdirSync(CACHE_DIR)
+      .filter((name) => name.endsWith(".wav"))
+      .map((name) => {
+        const filePath = path.join(CACHE_DIR, name);
+        return {
+          filePath,
+          mtimeMs: fs.statSync(filePath).mtimeMs,
+        };
+      })
+      .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+    for (const file of cachedFiles.slice(maxFiles)) {
+      cleanup(file.filePath);
+    }
+  } catch {
+    // ignore cache cleanup errors
+  }
 }
 
 function cleanup(filePath) {

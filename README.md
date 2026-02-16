@@ -72,10 +72,10 @@ sudo mv piper /usr/local/bin/
 # Create voices directory
 mkdir -p ~/.local/share/piper/voices
 
-# Download a good English voice (Alba - medium quality, good balance of speed/quality)
+# Download the default voice (Jenny - medium quality, closer to AU/NZ accent)
 cd ~/.local/share/piper/voices
-wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium/en_GB-alba-medium.onnx
-wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium/en_GB-alba-medium.onnx.json
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium.onnx
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium.onnx.json
 
 # Optional: Download additional voices
 wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx
@@ -83,6 +83,8 @@ wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/mediu
 ```
 
 Browse all available voices at: https://rhasspy.github.io/piper-samples/
+
+Note: As of February 16, 2026, Piper does not publish a native `en_AU` voice key in `voices.json`.
 
 ### 3. Install CastleCall
 
@@ -126,9 +128,11 @@ See `.env.example` for all options:
 | `PORT` | `3000` | Web server port |
 | `PIPER_PATH` | `piper` | Path to piper binary |
 | `VOICES_DIR` | `~/.local/share/piper/voices` | Directory containing voice models |
-| `DEFAULT_VOICE` | `en_GB-alba-medium` | Default voice to use |
+| `DEFAULT_VOICE` | `en_GB-jenny_dioco-medium` | Default voice to use |
 | `AUDIO_DEVICE` | `default` | ALSA audio device |
 | `MAX_TEXT_LENGTH` | `500` | Max characters per announcement |
+| `CACHE_ENABLED` | `true` | Enable WAV cache for repeated announcements |
+| `CACHE_MAX_FILES` | `100` | Max number of cached WAV files to retain |
 
 ## API
 
@@ -137,7 +141,7 @@ See `.env.example` for all options:
 ```json
 {
   "text": "Dinner is ready!",
-  "voice": "en_GB-alba-medium",
+  "voice": "en_GB-jenny_dioco-medium",
   "volume": 80
 }
 ```
@@ -149,6 +153,10 @@ Returns available voice models.
 ### `GET /api/history`
 
 Returns recent announcement history.
+
+### `POST /api/replay/:id`
+
+Replays a history entry immediately by ID.
 
 ## Running as a Service
 
