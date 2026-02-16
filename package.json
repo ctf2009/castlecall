@@ -1,0 +1,19 @@
+{
+  "name": "castlecall",
+  "version": "1.0.0",
+  "description": "Home PA / announcement system for Raspberry Pi with text-to-speech",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "setup": "bash setup.sh"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["tts", "raspberry-pi", "home-automation", "piper", "announcements"],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}

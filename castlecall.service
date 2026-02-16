@@ -1,0 +1,27 @@
+# CastleCall systemd service
+#
+# Before installing, update the following to match your system:
+#   - User=              your Linux username (default: pi)
+#   - WorkingDirectory=  path to your castlecall clone
+#   - ExecStart=         uses system Node.js; adjust if using nvm/fnm
+#
+# Install:
+#   sudo cp castlecall.service /etc/systemd/system/
+#   sudo systemctl enable castlecall
+#   sudo systemctl start castlecall
+
+[Unit]
+Description=CastleCall - Home Announcement System
+After=network.target sound.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/castlecall
+ExecStart=/usr/bin/node src/server.js
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

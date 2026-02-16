@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CastleCall</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface-hover: #232735;
+      --border: #2a2e3b;
+      --text: #e4e4e7;
+      --text-muted: #71717a;
+      --accent: #8b5cf6;
+      --accent-hover: #7c3aed;
+      --accent-glow: rgba(139, 92, 246, 0.15);
+      --danger: #ef4444;
+      --success: #22c55e;
+      --radius: 12px;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      min-height: 100dvh;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 24px 16px;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .header h1 span {
+      margin-right: 8px;
+    }
+
+    .header p {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      margin-top: 4px;
+    }
+
+    /* Announce Card */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .textarea-wrap {
+      position: relative;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 100px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 1rem;
+      padding: 12px;
+      resize: vertical;
+      transition: border-color 0.15s;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    textarea::placeholder {
+      color: var(--text-muted);
+    }
+
+    .char-count {
+      position: absolute;
+      bottom: 8px;
+      right: 12px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .char-count.warn {
+      color: var(--danger);
+    }
+
+    /* Controls Row */
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      align-items: end;
+    }
+
+    .control-group {
+      flex: 1;
+    }
+
+    .control-group label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    select {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.875rem;
+      appearance: none;
+      cursor: pointer;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    /* Volume Slider */
+    .volume-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .volume-icon {
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .volume-val {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      min-width: 32px;
+      text-align: right;
+    }
+
+    /* Submit Button */
+    .btn-announce {
+      width: 100%;
+      margin-top: 16px;
+      padding: 14px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-announce:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    .btn-announce:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    .btn-announce:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-announce.playing {
+      background: var(--success);
+    }
+
+    /* Quick Phrases */
+    .quick-phrases {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .quick-phrase {
+      padding: 6px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .quick-phrase:hover {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    /* History */
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .history-header h2 {
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    .history-list {
+      list-style: none;
+    }
+
+    .history-item {
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .history-item:last-child {
+      border-bottom: none;
+    }
+
+    .history-text {
+      font-size: 0.875rem;
+      line-height: 1.4;
+      flex: 1;
+    }
+
+    .history-meta {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .history-replay {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-muted);
+      padding: 4px 8px;
+      font-size: 0.7rem;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .history-replay:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .empty-state {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      padding: 24px 0;
+    }
+
+    /* Status Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 0.875rem;
+      transition: transform 0.3s ease;
+      z-index: 100;
+    }
+
+    .toast.visible {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .toast.error {
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    .toast.success {
+      border-color: var(--success);
+      color: var(--success);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1><span>🏰</span>CastleCall</h1>
+      <p>Home announcement system</p>
+    </div>
+
+    <div class="card">
+      <div class="textarea-wrap">
+        <textarea
+          id="text"
+          placeholder="Type your announcement..."
+          maxlength="500"
+          autofocus
+        ></textarea>
+        <span class="char-count" id="charCount">0 / 500</span>
+      </div>
+
+      <div class="quick-phrases">
+        <button class="quick-phrase" data-text="Dinner's ready!">🍽️ Dinner's ready</button>
+        <button class="quick-phrase" data-text="Time to go!">🚗 Time to go</button>
+        <button class="quick-phrase" data-text="Phone's ringing!">📱 Phone ringing</button>
+        <button class="quick-phrase" data-text="Someone's at the door!">🚪 Door</button>
+        <button class="quick-phrase" data-text="Five minutes!">⏰ 5 minutes</button>
+      </div>
+
+      <div class="controls">
+        <div class="control-group">
+          <label>Voice</label>
+          <select id="voice"></select>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="control-group">
+          <label>Volume</label>
+          <div class="volume-row">
+            <span class="volume-icon">🔊</span>
+            <input type="range" id="volume" min="10" max="100" value="80" />
+            <span class="volume-val" id="volumeVal">80%</span>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-announce" id="btnAnnounce">
+        📢 Announce
+      </button>
+    </div>
+
+    <div class="card">
+      <div class="history-header">
+        <h2>Recent Announcements</h2>
+      </div>
+      <ul class="history-list" id="historyList">
+        <li class="empty-state">No announcements yet</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const textEl = document.getElementById("text");
+    const charCountEl = document.getElementById("charCount");
+    const voiceEl = document.getElementById("voice");
+    const volumeEl = document.getElementById("volume");
+    const volumeValEl = document.getElementById("volumeVal");
+    const btnEl = document.getElementById("btnAnnounce");
+    const historyEl = document.getElementById("historyList");
+    const toastEl = document.getElementById("toast");
+
+    let maxLength = 500;
+
+    // Character count
+    textEl.addEventListener("input", () => {
+      const len = textEl.value.length;
+      charCountEl.textContent = `${len} / ${maxLength}`;
+      charCountEl.classList.toggle("warn", len > maxLength - 50);
+    });
+
+    // Volume display
+    volumeEl.addEventListener("input", () => {
+      volumeValEl.textContent = `${volumeEl.value}%`;
+    });
+
+    // Quick phrases
+    document.querySelectorAll(".quick-phrase").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        textEl.value = btn.dataset.text;
+        textEl.dispatchEvent(new Event("input"));
+        textEl.focus();
+      });
+    });
+
+    // Load voices
+    async function loadVoices() {
+      try {
+        const res = await fetch("/api/voices");
+        const data = await res.json();
+
+        voiceEl.innerHTML = "";
+        if (data.voices.length === 0) {
+          voiceEl.innerHTML = '<option value="">No voices found</option>';
+          return;
+        }
+
+        data.voices.forEach((v) => {
+          const opt = document.createElement("option");
+          opt.value = v.id;
+          opt.textContent = v.label;
+          if (v.id === data.default) opt.selected = true;
+          voiceEl.appendChild(opt);
+        });
+      } catch {
+        voiceEl.innerHTML = '<option value="">Failed to load</option>';
+      }
+    }
+
+    // Submit announcement
+    async function submitAnnouncement() {
+      const text = textEl.value.trim();
+      if (!text) {
+        showToast("Type something first!", "error");
+        return;
+      }
+
+      btnEl.disabled = true;
+      btnEl.textContent = "🔊 Playing...";
+      btnEl.classList.add("playing");
+
+      try {
+        const res = await fetch("/api/announce", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text,
+            voice: voiceEl.value,
+            volume: parseInt(volumeEl.value),
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Failed");
+        }
+
+        showToast("Announced!", "success");
+        textEl.value = "";
+        textEl.dispatchEvent(new Event("input"));
+        loadHistory();
+      } catch (err) {
+        showToast(err.message, "error");
+      } finally {
+        btnEl.disabled = false;
+        btnEl.textContent = "📢 Announce";
+        btnEl.classList.remove("playing");
+      }
+    }
+
+    btnEl.addEventListener("click", submitAnnouncement);
+
+    // Ctrl+Enter / Cmd+Enter to submit
+    textEl.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        submitAnnouncement();
+      }
+    });
+
+    // Load history
+    async function loadHistory() {
+      try {
+        const res = await fetch("/api/history");
+        const data = await res.json();
+
+        if (data.history.length === 0) {
+          historyEl.innerHTML = '<li class="empty-state">No announcements yet</li>';
+          return;
+        }
+
+        historyEl.innerHTML = data.history
+          .map(
+            (h) => `
+          <li class="history-item">
+            <span class="history-text">${escapeHtml(h.text)}</span>
+            <span class="history-meta">${timeAgo(h.timestamp)}</span>
+            <button class="history-replay" onclick="replay('${escapeHtml(h.text).replace(/'/g, "\\'")}')">\u21bb</button>
+          </li>
+        `
+          )
+          .join("");
+      } catch {
+        // ignore
+      }
+    }
+
+    // Replay a past announcement
+    window.replay = (text) => {
+      textEl.value = text;
+      textEl.dispatchEvent(new Event("input"));
+      textEl.focus();
+    };
+
+    // Toast notification
+    let toastTimeout;
+    function showToast(msg, type) {
+      toastEl.textContent = msg;
+      toastEl.className = `toast visible ${type}`;
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toastEl.classList.remove("visible");
+      }, 3000);
+    }
+
+    // Helpers
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function timeAgo(timestamp) {
+      const seconds = Math.floor((Date.now() - new Date(timestamp)) / 1000);
+      if (seconds < 60) return "just now";
+      if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+      if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+      return new Date(timestamp).toLocaleDateString();
+    }
+
+    // Init
+    loadVoices();
+    loadHistory();
+  </script>
+</body>
+</html>
