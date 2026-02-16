@@ -285,7 +285,39 @@
     .history-text {
       font-size: 0.875rem;
       line-height: 1.4;
+    }
+
+    .history-main {
       flex: 1;
+      min-width: 0;
+    }
+
+    .history-details {
+      margin-top: 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .history-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      letter-spacing: 0.02em;
+    }
+
+    .history-provider {
+      color: #93c5fd;
+      border-color: rgba(147, 197, 253, 0.35);
+    }
+
+    .history-voice {
+      color: #86efac;
+      border-color: rgba(134, 239, 172, 0.35);
     }
 
     .history-meta {
@@ -314,6 +346,23 @@
     }
 
     .history-replay:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .history-edit {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-muted);
+      padding: 7px 10px;
+      font-size: 0.75rem;
+      min-width: 38px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .history-edit:hover {
       border-color: var(--accent);
       color: var(--accent);
     }
@@ -450,6 +499,83 @@
     const toastEl = document.getElementById("toast");
 
     let maxLength = 500;
+    let historyById = new Map();
+    const voiceNameByProvider = new Map();
+
+    function normalizeProviderId(provider) {
+      return provider === "elevenlabs" ? "elevenlabs" : "piper";
+    }
+
+    function formatProviderName(provider) {
+      return normalizeProviderId(provider) === "elevenlabs" ? "ElevenLabs" : "Piper";
+    }
+
+    function shortVoiceNameFromVoice(voice) {
+      const speaker = (voice.speaker || "").trim();
+      if (speaker) {
+        return speaker.split(" - ")[0].trim();
+      }
+
+      const label = (voice.label || "").trim();
+      if (label) {
+        return label.split("(")[0].trim();
+      }
+
+      return (voice.id || "").trim();
+    }
+
+    function fallbackVoiceName(provider, voiceId) {
+      if (!voiceId) return "default";
+      const normalizedProvider = normalizeProviderId(provider);
+
+      if (normalizedProvider === "piper") {
+        const parts = voiceId.split("-");
+        if (parts.length >= 3) {
+          return parts.slice(1, -1).join("-") || voiceId;
+        }
+      }
+
+      if (normalizedProvider === "elevenlabs") {
+        return `voice ${voiceId.substring(0, 6)}`;
+      }
+
+      return voiceId;
+    }
+
+    function getHistoryVoiceName(entry) {
+      const provider = normalizeProviderId(entry.provider);
+      const voiceId = entry.voice || "";
+      const providerMap = voiceNameByProvider.get(provider);
+
+      if (providerMap && providerMap.has(voiceId)) {
+        return providerMap.get(voiceId);
+      }
+
+      return fallbackVoiceName(provider, voiceId);
+    }
+
+    async function cacheVoices(provider) {
+      const normalizedProvider = normalizeProviderId(provider);
+      if (voiceNameByProvider.has(normalizedProvider)) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/voices?provider=${encodeURIComponent(normalizedProvider)}`);
+        const data = await res.json();
+        if (!res.ok || !Array.isArray(data.voices)) {
+          return;
+        }
+
+        const map = new Map();
+        data.voices.forEach((voice) => {
+          map.set(voice.id, shortVoiceNameFromVoice(voice));
+        });
+        voiceNameByProvider.set(normalizedProvider, map);
+      } catch {
+        // ignore cache failures
+      }
+    }
 
     // Character count
     textEl.addEventListener("input", () => {
@@ -508,9 +634,14 @@
     // Load voices for the selected provider
     async function loadVoices(provider) {
       try {
-        const selectedProvider = provider || providerEl.value || "piper";
+        const selectedProvider = normalizeProviderId(provider || providerEl.value || "piper");
         const res = await fetch(`/api/voices?provider=${encodeURIComponent(selectedProvider)}`);
         const data = await res.json();
+        const names = new Map();
+        (data.voices || []).forEach((voice) => {
+          names.set(voice.id, shortVoiceNameFromVoice(voice));
+        });
+        voiceNameByProvider.set(selectedProvider, names);
 
         voiceEl.innerHTML = "";
         if (data.voices.length === 0) {
@@ -592,8 +723,15 @@
       try {
         const res = await fetch("/api/history");
         const data = await res.json();
+        historyById = new Map(data.history.map((entry) => [entry.id, entry]));
+
+        const providersInHistory = Array.from(
+          new Set(data.history.map((entry) => normalizeProviderId(entry.provider)))
+        );
+        await Promise.all(providersInHistory.map((provider) => cacheVoices(provider)));
 
         if (data.history.length === 0) {
+          historyById = new Map();
           historyEl.innerHTML = '<li class="empty-state">No announcements yet</li>';
           return;
         }
@@ -602,10 +740,17 @@
           .map(
             (h) => `
           <li class="history-item">
-            <span class="history-text">${escapeHtml(h.text)}</span>
+            <div class="history-main">
+              <span class="history-text">${escapeHtml(h.text)}</span>
+              <div class="history-details">
+                <span class="history-chip history-provider">${escapeHtml(formatProviderName(h.provider))}</span>
+                <span class="history-chip history-voice">${escapeHtml(getHistoryVoiceName(h))}</span>
+              </div>
+            </div>
             <div class="history-actions">
               <span class="history-meta">${timeAgo(h.timestamp)}</span>
               <button class="history-replay" onclick="replay('${h.id}')" aria-label="Replay">\u21bb</button>
+              <button class="history-edit" onclick="editHistoryItem('${h.id}')" aria-label="Edit">Edit</button>
               <button class="history-delete" onclick="deleteHistoryItem('${h.id}')" aria-label="Delete">X</button>
             </div>
           </li>
@@ -637,6 +782,44 @@
         btnEl.textContent = "📢 Announce";
         btnEl.classList.remove("playing");
       }
+    };
+
+    window.editHistoryItem = async (id) => {
+      const entry = historyById.get(id);
+      if (!entry) {
+        showToast("History item not found", "error");
+        return;
+      }
+
+      textEl.value = entry.text || "";
+      textEl.dispatchEvent(new Event("input"));
+
+      const targetProvider = entry.provider || providerEl.value || "piper";
+      const providerOption = Array.from(providerEl.options).find(
+        (option) => option.value === targetProvider && !option.disabled
+      );
+      if (providerOption) {
+        providerEl.value = targetProvider;
+      }
+
+      await loadVoices(providerEl.value);
+
+      if (entry.voice) {
+        const matchingVoice = Array.from(voiceEl.options).find(
+          (option) => option.value === entry.voice
+        );
+        if (matchingVoice) {
+          voiceEl.value = entry.voice;
+        }
+      }
+
+      const selectedVolume = Math.min(100, Math.max(10, parseInt(entry.volume) || 40));
+      volumeEl.value = selectedVolume;
+      volumeValEl.textContent = `${selectedVolume}%`;
+
+      textEl.focus();
+      textEl.setSelectionRange(textEl.value.length, textEl.value.length);
+      showToast("Loaded into editor", "success");
     };
 
     window.deleteHistoryItem = async (id) => {

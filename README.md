@@ -2,7 +2,11 @@
 
 Home PA / announcement system for Raspberry Pi. Type text in a web UI and play announcements through your speakers.
 
-Built to run alongside AirPlay (`shairport-sync`) on a Pi connected to an amplifier and in-ceiling speakers.
+Built to run alongside AirPlay (`shairport-sync`) on a Pi connected to an amplifier and speakers.
+
+## Example UI
+
+![CastleCall UI example](Example.png)
 
 ## Features
 
@@ -28,7 +32,7 @@ Phone/Laptop -> Browser -> CastleCall Web UI
                  aplay/play outputs to Pi audio
                           |
                           v
-                     Amp -> Ceiling speakers
+                     Amp -> Speakers
 ```
 
 ## Prerequisites
