@@ -24,18 +24,43 @@ function loadConfig() {
     if (value === undefined) return fallback;
     return value.toLowerCase() !== "false";
   };
+  const parseNumber = (value, fallback) => {
+    const parsed = parseInt(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  const normalizeProvider = (value) =>
+    value === "elevenlabs" || value === "piper" ? value : "piper";
+
+  const ttsProvider = normalizeProvider(process.env.TTS_PROVIDER || "piper");
+  const elevenlabsApiKey = process.env.ELEVENLABS_API_KEY || "";
+  const elevenlabsVoiceId = process.env.ELEVENLABS_VOICE_ID || "";
+  const elevenlabsModelId = process.env.ELEVENLABS_MODEL_ID || "eleven_multilingual_v2";
+  const elevenlabsOutputFormat = process.env.ELEVENLABS_OUTPUT_FORMAT || "pcm_22050";
+  const elevenlabsTimeoutMs = parseNumber(process.env.ELEVENLABS_TIMEOUT_MS, 15000);
+
+  if (ttsProvider === "elevenlabs" && (!elevenlabsApiKey || !elevenlabsVoiceId)) {
+    throw new Error(
+      "TTS_PROVIDER is set to elevenlabs, but ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID are not both set"
+    );
+  }
 
   return {
-    port: parseInt(process.env.PORT) || 3000,
+    port: parseNumber(process.env.PORT, 3000),
     piperPath: process.env.PIPER_PATH || "piper",
     voicesDir: resolveHome(
       process.env.VOICES_DIR || path.join(os.homedir(), ".local/share/piper/voices")
     ),
     defaultVoice: process.env.DEFAULT_VOICE || "en_GB-jenny_dioco-medium",
     audioDevice: process.env.AUDIO_DEVICE || "default",
-    maxTextLength: parseInt(process.env.MAX_TEXT_LENGTH) || 500,
+    maxTextLength: parseNumber(process.env.MAX_TEXT_LENGTH, 500),
     cacheEnabled: parseBool(process.env.CACHE_ENABLED, true),
-    cacheMaxFiles: parseInt(process.env.CACHE_MAX_FILES) || 100,
+    cacheMaxFiles: parseNumber(process.env.CACHE_MAX_FILES, 100),
+    ttsProvider,
+    elevenlabsApiKey,
+    elevenlabsVoiceId,
+    elevenlabsModelId,
+    elevenlabsOutputFormat,
+    elevenlabsTimeoutMs,
   };
 }
 

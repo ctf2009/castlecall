@@ -1,12 +1,13 @@
 const MAX_HISTORY = 50;
 const history = [];
 
-function addEntry(text, voice, volume = 80) {
+function addEntry(text, voice, volume = 40, provider = "piper") {
   const entry = {
     id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
     text,
     voice,
     volume,
+    provider,
     timestamp: new Date().toISOString(),
   };
 

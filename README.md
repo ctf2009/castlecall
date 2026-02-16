@@ -1,37 +1,41 @@
-# 🏰 CastleCall
+# CastleCall
 
-A home PA / announcement system for Raspberry Pi. Type text into a web UI, hear it through your ceiling speakers.
+Home PA / announcement system for Raspberry Pi. Type text in a web UI and play announcements through your speakers.
 
-Built to run alongside AirPlay (shairport-sync) on a Pi connected to an amplifier and in-ceiling speakers.
+Built to run alongside AirPlay (`shairport-sync`) on a Pi connected to an amplifier and in-ceiling speakers.
 
 ## Features
 
-- 🎙️ Text-to-speech via [Piper TTS](https://github.com/rhasspy/piper) (fully local, no cloud APIs)
-- 🌐 Clean web UI accessible from any device on your network
-- 📢 Adjustable volume, voice selection, and speech rate
-- 📝 Announcement history log
-- 🔊 Plays directly through Pi audio output to your amp/speakers
-- ⚡ Lightweight — designed to coexist with shairport-sync
+- Local TTS with [Piper](https://github.com/rhasspy/piper)
+- Optional cloud TTS with [ElevenLabs](https://elevenlabs.io/)
+- Provider and voice selection in the UI
+- Adjustable volume
+- Replayable announcement history
+- Audio caching for faster repeated announcements/replays
 
 ## Architecture
 
 ```
-Phone/Laptop → Browser → CastleCall Web UI
-                              ↓
-                    POST /api/announce { text, voice, volume }
-                              ↓
-                    Piper TTS generates WAV
-                              ↓
-                    aplay outputs to Pi audio
-                              ↓
-                    Amp → Ceiling Speakers 🔊
+Phone/Laptop -> Browser -> CastleCall Web UI
+                          |
+                          v
+         POST /api/announce { text, provider, voice, volume }
+                          |
+                          v
+       Provider (Piper or ElevenLabs) generates WAV audio
+                          |
+                          v
+                 aplay/play outputs to Pi audio
+                          |
+                          v
+                     Amp -> Ceiling speakers
 ```
 
 ## Prerequisites
 
-- Raspberry Pi (3B+ or newer recommended) with audio output configured
-- Node.js 18+ installed on the Pi
-- Your amp/speaker setup already working with the Pi audio output
+- Raspberry Pi (3B+ recommended) with working audio output
+- Node.js 18+ installed
+- `aplay` available (from `alsa-utils`)
 
 ## Quick Start
 
@@ -42,49 +46,31 @@ cd castlecall
 npm start
 ```
 
-The setup script handles everything: installs Piper TTS, downloads a voice model, creates your `.env`, and installs Node dependencies.
-
-Then open `http://<your-pi-ip>:3000` in your browser.
+Open `http://<your-pi-ip>:3000`.
 
 ## Manual Installation
-
-> The [setup script](#quick-start) handles these steps automatically. Follow these if you prefer more control.
 
 ### 1. Install Piper TTS
 
 ```bash
-# Install piper
-sudo apt-get update
-sudo apt-get install -y piper
-
-# OR install via pip
-pip install piper-tts
-
-# OR download the binary directly
-wget https://github.com/rhasspy/piper/releases/latest/download/piper_linux_aarch64.tar.gz
-tar -xzf piper_linux_aarch64.tar.gz
-sudo mv piper /usr/local/bin/
+# Recommended: install Rhasspy Piper binary from releases
+wget https://github.com/rhasspy/piper/releases/latest/download/piper_linux_armv7l.tar.gz
+tar -xzf piper_linux_armv7l.tar.gz
+sudo mkdir -p /usr/local/piper
+sudo cp -r piper/* /usr/local/piper/
+sudo ln -sf /usr/local/piper/piper /usr/local/bin/piper-tts
 ```
+
+Set `PIPER_PATH=/usr/local/bin/piper-tts` in `.env`.
 
 ### 2. Download a Voice
 
 ```bash
-# Create voices directory
 mkdir -p ~/.local/share/piper/voices
-
-# Download the default voice (Jenny - medium quality, closer to AU/NZ accent)
 cd ~/.local/share/piper/voices
 wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium.onnx
 wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium.onnx.json
-
-# Optional: Download additional voices
-wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx
-wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json
 ```
-
-Browse all available voices at: https://rhasspy.github.io/piper-samples/
-
-Note: As of February 16, 2026, Piper does not publish a native `en_AU` voice key in `voices.json`.
 
 ### 3. Install CastleCall
 
@@ -92,63 +78,60 @@ Note: As of February 16, 2026, Piper does not publish a native `en_AU` voice key
 git clone <your-repo-url>
 cd castlecall
 npm install
-```
-
-### 4. Configure
-
-```bash
 cp .env.example .env
-# Edit .env with your settings
-nano .env
 ```
 
-### 5. Run
+### 4. Run
 
 ```bash
-# Development
-npm run dev
-
-# Production
 npm start
-
-# With PM2 (recommended for always-on)
-pm2 start npm --name castlecall -- start
-pm2 save
-pm2 startup
 ```
-
-Then open `http://<your-pi-ip>:3000` in your browser.
 
 ## Configuration
 
-See `.env.example` for all options:
+See `.env.example` for all options.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `3000` | Web server port |
 | `PIPER_PATH` | `piper` | Path to piper binary |
-| `VOICES_DIR` | `~/.local/share/piper/voices` | Directory containing voice models |
-| `DEFAULT_VOICE` | `en_GB-jenny_dioco-medium` | Default voice to use |
-| `AUDIO_DEVICE` | `default` | ALSA audio device |
-| `MAX_TEXT_LENGTH` | `500` | Max characters per announcement |
-| `CACHE_ENABLED` | `true` | Enable WAV cache for repeated announcements |
-| `CACHE_MAX_FILES` | `100` | Max number of cached WAV files to retain |
+| `VOICES_DIR` | `~/.local/share/piper/voices` | Piper voice directory |
+| `DEFAULT_VOICE` | `en_GB-jenny_dioco-medium` | Default Piper voice |
+| `AUDIO_DEVICE` | `default` | ALSA output device |
+| `MAX_TEXT_LENGTH` | `500` | Max announcement length |
+| `CACHE_ENABLED` | `true` | Enable WAV cache |
+| `CACHE_MAX_FILES` | `100` | Max cached WAV files |
+| `TTS_PROVIDER` | `piper` | Default provider: `piper` or `elevenlabs` |
+| `ELEVENLABS_API_KEY` | _(empty)_ | ElevenLabs API key |
+| `ELEVENLABS_VOICE_ID` | _(empty)_ | Default ElevenLabs voice ID |
+| `ELEVENLABS_MODEL_ID` | `eleven_multilingual_v2` | ElevenLabs model |
+| `ELEVENLABS_OUTPUT_FORMAT` | `pcm_22050` | ElevenLabs PCM format |
+| `ELEVENLABS_TIMEOUT_MS` | `15000` | ElevenLabs timeout (ms) |
+
+Notes:
+- `ELEVENLABS_OUTPUT_FORMAT` currently supports `pcm_*` formats only.
+- If `TTS_PROVIDER=elevenlabs`, both `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` must be set.
 
 ## API
+
+### `GET /api/providers`
+
+Returns available providers and the default provider.
+
+### `GET /api/voices?provider=<piper|elevenlabs>`
+
+Returns voices for the selected provider.
 
 ### `POST /api/announce`
 
 ```json
 {
   "text": "Dinner is ready!",
+  "provider": "piper",
   "voice": "en_GB-jenny_dioco-medium",
-  "volume": 80
+  "volume": 40
 }
 ```
-
-### `GET /api/voices`
-
-Returns available voice models.
 
 ### `GET /api/history`
 
@@ -156,23 +139,27 @@ Returns recent announcement history.
 
 ### `POST /api/replay/:id`
 
-Replays a history entry immediately by ID.
+Replays a history entry by ID.
+
+### `GET /api/status`
+
+Returns playback status.
 
 ## Running as a Service
 
-> **Note:** Edit `castlecall.service` before copying to update the `User` and `WorkingDirectory` values for your system. See the comments in the file.
+Update `castlecall.service` for your user and path, then:
 
 ```bash
 sudo cp castlecall.service /etc/systemd/system/
+sudo systemctl daemon-reload
 sudo systemctl enable castlecall
 sudo systemctl start castlecall
 ```
 
 ## Tips
 
-- **AirPlay coexistence**: CastleCall uses `aplay` which shares the ALSA device. If music is playing via AirPlay, announcements will mix in (or queue depending on your ALSA config).
-- **Volume control**: Use `amixer` on the Pi to set the master volume. CastleCall's volume slider adjusts TTS output level relative to this.
-- **Network access**: Make sure port 3000 is accessible on your local network.
+- If `sox` is installed, volume scaling uses `play`; otherwise playback falls back to `aplay`.
+- Cached files are stored under `/tmp/castlecall-cache`.
 
 ## License
 

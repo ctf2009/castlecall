@@ -377,6 +377,11 @@
 
       <div class="controls">
         <div class="control-group">
+          <label>Provider</label>
+          <select id="provider"></select>
+        </div>
+
+        <div class="control-group">
           <label>Voice</label>
           <select id="voice"></select>
         </div>
@@ -387,8 +392,8 @@
           <label>Volume</label>
           <div class="volume-row">
             <span class="volume-icon">🔊</span>
-            <input type="range" id="volume" min="10" max="100" value="80" />
-            <span class="volume-val" id="volumeVal">80%</span>
+            <input type="range" id="volume" min="10" max="100" value="40" />
+            <span class="volume-val" id="volumeVal">40%</span>
           </div>
         </div>
       </div>
@@ -413,6 +418,7 @@
   <script>
     const textEl = document.getElementById("text");
     const charCountEl = document.getElementById("charCount");
+    const providerEl = document.getElementById("provider");
     const voiceEl = document.getElementById("voice");
     const volumeEl = document.getElementById("volume");
     const volumeValEl = document.getElementById("volumeVal");
@@ -443,10 +449,44 @@
       });
     });
 
-    // Load voices
-    async function loadVoices() {
+    // Load providers
+    async function loadProviders() {
       try {
-        const res = await fetch("/api/voices");
+        const res = await fetch("/api/providers");
+        const data = await res.json();
+
+        providerEl.innerHTML = "";
+        data.providers.forEach((p) => {
+          const opt = document.createElement("option");
+          opt.value = p.id;
+          opt.disabled = !p.enabled;
+          opt.textContent = p.enabled ? p.label : `${p.label} (disabled)`;
+          providerEl.appendChild(opt);
+        });
+
+        const preferred = data.default || "piper";
+        const preferredOption = Array.from(providerEl.options).find(
+          (opt) => opt.value === preferred && !opt.disabled
+        );
+        if (preferredOption) {
+          providerEl.value = preferred;
+        } else {
+          const firstEnabled = Array.from(providerEl.options).find((opt) => !opt.disabled);
+          if (firstEnabled) {
+            providerEl.value = firstEnabled.value;
+          }
+        }
+      } catch {
+        providerEl.innerHTML = '<option value="piper">Piper (Local)</option>';
+        providerEl.value = "piper";
+      }
+    }
+
+    // Load voices for the selected provider
+    async function loadVoices(provider) {
+      try {
+        const selectedProvider = provider || providerEl.value || "piper";
+        const res = await fetch(`/api/voices?provider=${encodeURIComponent(selectedProvider)}`);
         const data = await res.json();
 
         voiceEl.innerHTML = "";
@@ -467,6 +507,10 @@
       }
     }
 
+    providerEl.addEventListener("change", () => {
+      loadVoices(providerEl.value);
+    });
+
     // Submit announcement
     async function submitAnnouncement() {
       const text = textEl.value.trim();
@@ -485,6 +529,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             text,
+            provider: providerEl.value,
             voice: voiceEl.value,
             volume: parseInt(volumeEl.value),
           }),
@@ -595,8 +640,13 @@
     }
 
     // Init
-    loadVoices();
-    loadHistory();
+    async function init() {
+      await loadProviders();
+      await loadVoices(providerEl.value);
+      loadHistory();
+    }
+
+    init();
   </script>
 </body>
 </html>
