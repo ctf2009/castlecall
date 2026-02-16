@@ -30,6 +30,13 @@ function loadConfig() {
   };
   const normalizeProvider = (value) =>
     value === "elevenlabs" || value === "piper" ? value : "piper";
+  const normalizeVoiceListMode = (value) =>
+    value === "custom_only" ? "custom_only" : "all";
+  const parseCsvList = (value) =>
+    (value || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
 
   const ttsProvider = normalizeProvider(process.env.TTS_PROVIDER || "piper");
   const elevenlabsApiKey = process.env.ELEVENLABS_API_KEY || "";
@@ -37,6 +44,13 @@ function loadConfig() {
   const elevenlabsModelId = process.env.ELEVENLABS_MODEL_ID || "eleven_multilingual_v2";
   const elevenlabsOutputFormat = process.env.ELEVENLABS_OUTPUT_FORMAT || "pcm_22050";
   const elevenlabsTimeoutMs = parseNumber(process.env.ELEVENLABS_TIMEOUT_MS, 15000);
+  const elevenlabsVoiceListMode = normalizeVoiceListMode(
+    process.env.ELEVENLABS_VOICE_LIST_MODE
+  );
+  const elevenlabsAdditionalVoiceIds = parseCsvList(
+    process.env.ELEVENLABS_ADDITIONAL_VOICE_IDS
+  );
+  const elevenlabsHiddenVoiceIds = parseCsvList(process.env.ELEVENLABS_HIDDEN_VOICE_IDS);
 
   if (ttsProvider === "elevenlabs" && (!elevenlabsApiKey || !elevenlabsVoiceId)) {
     throw new Error(
@@ -61,6 +75,9 @@ function loadConfig() {
     elevenlabsModelId,
     elevenlabsOutputFormat,
     elevenlabsTimeoutMs,
+    elevenlabsVoiceListMode,
+    elevenlabsAdditionalVoiceIds,
+    elevenlabsHiddenVoiceIds,
   };
 }
 

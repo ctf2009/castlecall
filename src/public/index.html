@@ -292,6 +292,12 @@
       font-size: 0.7rem;
       color: var(--text-muted);
       white-space: nowrap;
+    }
+
+    .history-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       flex-shrink: 0;
     }
 
@@ -310,6 +316,23 @@
     .history-replay:hover {
       border-color: var(--accent);
       color: var(--accent);
+    }
+
+    .history-delete {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-muted);
+      padding: 7px 10px;
+      font-size: 0.75rem;
+      min-width: 38px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .history-delete:hover {
+      border-color: var(--danger);
+      color: var(--danger);
     }
 
     .empty-state {
@@ -580,8 +603,11 @@
             (h) => `
           <li class="history-item">
             <span class="history-text">${escapeHtml(h.text)}</span>
-            <span class="history-meta">${timeAgo(h.timestamp)}</span>
-            <button class="history-replay" onclick="replay('${h.id}')">\u21bb</button>
+            <div class="history-actions">
+              <span class="history-meta">${timeAgo(h.timestamp)}</span>
+              <button class="history-replay" onclick="replay('${h.id}')" aria-label="Replay">\u21bb</button>
+              <button class="history-delete" onclick="deleteHistoryItem('${h.id}')" aria-label="Delete">X</button>
+            </div>
           </li>
         `
           )
@@ -610,6 +636,22 @@
         btnEl.disabled = false;
         btnEl.textContent = "📢 Announce";
         btnEl.classList.remove("playing");
+      }
+    };
+
+    window.deleteHistoryItem = async (id) => {
+      try {
+        const res = await fetch(`/api/history/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Failed");
+        }
+        showToast("Removed history item", "success");
+        loadHistory();
+      } catch (err) {
+        showToast(err.message, "error");
       }
     };
 

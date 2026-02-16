@@ -29,4 +29,14 @@ function getEntryById(id) {
   return history.find((entry) => entry.id === id);
 }
 
-module.exports = { addEntry, getHistory, getEntryById };
+function removeEntryById(id) {
+  const index = history.findIndex((entry) => entry.id === id);
+  if (index === -1) {
+    return null;
+  }
+
+  const [removed] = history.splice(index, 1);
+  return removed;
+}
+
+module.exports = { addEntry, getHistory, getEntryById, removeEntryById };

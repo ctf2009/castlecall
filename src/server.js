@@ -9,7 +9,7 @@ const {
   normalizeProvider,
   PROVIDERS,
 } = require("./tts");
-const { addEntry, getHistory, getEntryById } = require("./history");
+const { addEntry, getHistory, getEntryById, removeEntryById } = require("./history");
 const { loadConfig } = require("./config");
 
 const config = loadConfig();
@@ -152,6 +152,16 @@ app.post("/api/replay/:id", async (req, res) => {
 // Get announcement history
 app.get("/api/history", (req, res) => {
   res.json({ history: getHistory() });
+});
+
+// Delete a single history entry
+app.delete("/api/history/:id", (req, res) => {
+  const removed = removeEntryById(req.params.id);
+  if (!removed) {
+    return res.status(404).json({ error: "History entry not found" });
+  }
+
+  res.json({ success: true, id: removed.id });
 });
 
 // Get current status

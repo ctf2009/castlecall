@@ -3,12 +3,13 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { ElevenLabsClient } = require("@elevenlabs/elevenlabs-js");
 
 const CACHE_DIR = path.join(os.tmpdir(), "castlecall-cache");
-const ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1";
 const PROVIDERS = ["piper", "elevenlabs"];
 
 let currentlyPlaying = false;
+let elevenLabsClientState = null;
 
 function normalizeProvider(provider) {
   return provider === "elevenlabs" ? "elevenlabs" : "piper";
@@ -152,34 +153,66 @@ async function getElevenLabsVoices(config) {
     throw new Error("ELEVENLABS_API_KEY is not set");
   }
 
-  const response = await fetch(`${ELEVENLABS_API_BASE}/voices`, {
-    headers: {
-      "xi-api-key": config.elevenlabsApiKey,
-    },
-    signal: AbortSignal.timeout(config.elevenlabsTimeoutMs),
+  const additionalIds = config.elevenlabsAdditionalVoiceIds || [];
+  const additionalIdsSet = new Set(additionalIds);
+  const hiddenIds = new Set(config.elevenlabsHiddenVoiceIds || []);
+  const customOnly = config.elevenlabsVoiceListMode === "custom_only";
+  const makeFallbackVoice = (voiceId) => ({
+    id: voiceId,
+    file: null,
+    locale: "",
+    speaker: `Custom voice ${voiceId.substring(0, 6)}`,
+    quality: "custom",
+    provider: "elevenlabs",
+    label: `Custom voice (${voiceId})`,
   });
 
-  if (!response.ok) {
-    throw new Error(await getElevenLabsErrorMessage(response));
+  try {
+    const elevenlabs = getElevenLabsClient(config);
+    const data = await elevenlabs.voices.getAll();
+    let voices = (data.voices || [])
+      .map((voice) => {
+      const accent = voice.labels?.accent || "";
+      const locale = voice.verifiedLanguages?.[0]?.locale || "";
+      const quality = voice.category || "";
+      const accentSuffix = accent ? `, ${accent}` : "";
+
+      return {
+        id: voice.voiceId,
+        file: null,
+        locale,
+        speaker: voice.name,
+        quality,
+        provider: "elevenlabs",
+        label: `${voice.name} (${quality}${accentSuffix})`,
+      };
+      })
+      .filter((voice) => !hiddenIds.has(voice.id));
+
+    if (customOnly) {
+      const byId = new Map(voices.map((voice) => [voice.id, voice]));
+      return additionalIds
+        .filter((voiceId) => !hiddenIds.has(voiceId))
+        .map((voiceId) => byId.get(voiceId) || makeFallbackVoice(voiceId));
+    }
+
+    // Some voice IDs can be callable but not returned in the list for this account.
+    const existingIds = new Set(voices.map((voice) => voice.id));
+    for (const extraId of additionalIds) {
+      if (!existingIds.has(extraId) && !hiddenIds.has(extraId)) {
+        voices.push(makeFallbackVoice(extraId));
+      }
+    }
+
+    return voices;
+  } catch (error) {
+    if (customOnly) {
+      return additionalIds
+        .filter((voiceId) => !hiddenIds.has(voiceId))
+        .map((voiceId) => makeFallbackVoice(voiceId));
+    }
+    throw new Error(getElevenLabsErrorMessage(error));
   }
-
-  const data = await response.json();
-  return (data.voices || []).map((voice) => {
-    const accent = voice.labels?.accent || "";
-    const locale = voice.verified_languages?.[0]?.locale || "";
-    const quality = voice.category || "";
-    const accentSuffix = accent ? `, ${accent}` : "";
-
-    return {
-      id: voice.voice_id,
-      file: null,
-      locale,
-      speaker: voice.name,
-      quality,
-      provider: "elevenlabs",
-      label: `${voice.name} (${quality}${accentSuffix})`,
-    };
-  });
 }
 
 function generateWithPiper(config, { text, voice, outputFile }) {
@@ -227,29 +260,93 @@ async function generateWithElevenLabs(config, { text, voice, outputFile }) {
   }
 
   const sampleRate = parsePcmSampleRate(config.elevenlabsOutputFormat);
-  const requestUrl = new URL(`${ELEVENLABS_API_BASE}/text-to-speech/${encodeURIComponent(voice)}`);
-  requestUrl.searchParams.set("output_format", config.elevenlabsOutputFormat);
 
-  const response = await fetch(requestUrl, {
-    method: "POST",
-    headers: {
-      "xi-api-key": config.elevenlabsApiKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      text,
-      model_id: config.elevenlabsModelId,
-    }),
-    signal: AbortSignal.timeout(config.elevenlabsTimeoutMs),
-  });
+  try {
+    const elevenlabs = getElevenLabsClient(config);
+    const audioStream = await elevenlabs.textToSpeech.convert(
+      voice,
+      {
+        text,
+        modelId: config.elevenlabsModelId,
+        outputFormat: config.elevenlabsOutputFormat,
+      },
+      {
+        timeoutInSeconds: getTimeoutSeconds(config.elevenlabsTimeoutMs),
+      }
+    );
 
-  if (!response.ok) {
-    throw new Error(await getElevenLabsErrorMessage(response));
+    const audioBuffer = await audioToBuffer(audioStream);
+    const wavBuffer = pcm16MonoToWav(audioBuffer, sampleRate);
+    fs.writeFileSync(outputFile, wavBuffer);
+  } catch (error) {
+    throw new Error(getElevenLabsErrorMessage(error));
+  }
+}
+
+function getElevenLabsClient(config) {
+  const timeoutInSeconds = getTimeoutSeconds(config.elevenlabsTimeoutMs);
+  const key = `${config.elevenlabsApiKey}:${timeoutInSeconds}`;
+  if (elevenLabsClientState?.key === key) {
+    return elevenLabsClientState.client;
   }
 
-  const audioBuffer = Buffer.from(await response.arrayBuffer());
-  const wavBuffer = pcm16MonoToWav(audioBuffer, sampleRate);
-  fs.writeFileSync(outputFile, wavBuffer);
+  const client = new ElevenLabsClient({
+    apiKey: config.elevenlabsApiKey,
+    timeoutInSeconds,
+  });
+  elevenLabsClientState = { key, client };
+  return client;
+}
+
+function getTimeoutSeconds(timeoutMs) {
+  const seconds = Math.ceil((Number(timeoutMs) || 15000) / 1000);
+  return Math.max(1, seconds);
+}
+
+async function audioToBuffer(audio) {
+  if (!audio) {
+    return Buffer.alloc(0);
+  }
+  if (Buffer.isBuffer(audio)) {
+    return audio;
+  }
+  if (audio instanceof Uint8Array) {
+    return Buffer.from(audio);
+  }
+  if (typeof audio.arrayBuffer === "function") {
+    return Buffer.from(await audio.arrayBuffer());
+  }
+  if (typeof audio.getReader === "function") {
+    return readableStreamToBuffer(audio);
+  }
+  if (typeof audio[Symbol.asyncIterator] === "function") {
+    const chunks = [];
+    for await (const chunk of audio) {
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+  if (typeof audio.on === "function") {
+    return new Promise((resolve, reject) => {
+      const chunks = [];
+      audio.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      audio.on("end", () => resolve(Buffer.concat(chunks)));
+      audio.on("error", reject);
+    });
+  }
+
+  throw new Error("Unsupported ElevenLabs audio response type");
+}
+
+async function readableStreamToBuffer(stream) {
+  const reader = stream.getReader();
+  const chunks = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks);
 }
 
 function parsePcmSampleRate(outputFormat) {
@@ -287,29 +384,27 @@ function pcm16MonoToWav(pcmBuffer, sampleRate) {
   return Buffer.concat([header, pcmBuffer]);
 }
 
-async function getElevenLabsErrorMessage(response) {
-  let details = "";
-  try {
-    const payload = await response.json();
-    details = payload?.detail?.message || payload?.detail || payload?.message || "";
-  } catch {
-    // ignore parse errors
-  }
+function getElevenLabsErrorMessage(error) {
+  const status = error?.statusCode || error?.status;
+  const body = error?.body;
+  const details = body?.detail?.message || body?.detail || body?.message || error?.message || "";
 
-  if (response.status === 401 || response.status === 403) {
+  if (status === 401 || status === 403) {
     return "ElevenLabs authentication failed. Check ELEVENLABS_API_KEY.";
   }
-  if (response.status === 429) {
+  if (status === 429) {
     return "ElevenLabs rate limit or quota reached.";
   }
-  if (response.status >= 500) {
+  if (status >= 500) {
     return "ElevenLabs is currently unavailable.";
   }
   if (details) {
-    return `ElevenLabs request failed (${response.status}): ${details}`;
+    return `ElevenLabs request failed${status ? ` (${status})` : ""}: ${details}`;
   }
-
-  return `ElevenLabs request failed with status ${response.status}`;
+  if (status) {
+    return `ElevenLabs request failed with status ${status}`;
+  }
+  return "ElevenLabs request failed";
 }
 
 function playAudioFile(config, audioFile, volume, resolve, reject, cleanupOnFinish) {
