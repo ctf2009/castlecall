@@ -14,6 +14,7 @@ Built to run alongside AirPlay (`shairport-sync`) on a Pi connected to an amplif
 - Optional cloud TTS with [ElevenLabs](https://elevenlabs.io/)
 - Provider and voice selection in the UI
 - Adjustable volume
+- Optional delayed announcements (1-60 minutes)
 - Replayable announcement history
 - Audio caching for faster repeated announcements/replays
 
@@ -133,9 +134,12 @@ Returns voices for the selected provider.
   "text": "Dinner is ready!",
   "provider": "piper",
   "voice": "en_GB-jenny_dioco-medium",
-  "volume": 40
+  "volume": 40,
+  "delayMinutes": 5
 }
 ```
+
+`delayMinutes` is optional. Use `0` for immediate playback, up to a maximum of `60`.
 
 ### `GET /api/history`
 

@@ -14,6 +14,10 @@ const { loadConfig } = require("./config");
 
 const config = loadConfig();
 const app = express();
+const MAX_SCHEDULE_DELAY_MINUTES = 60;
+const SCHEDULE_RETRY_MS = 5000;
+const SCHEDULE_MAX_RETRIES = 24;
+const scheduledJobs = new Map();
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
@@ -33,6 +37,113 @@ function getProviderConfigError(provider) {
     return "ElevenLabs is not configured (missing ELEVENLABS_API_KEY)";
   }
   return null;
+}
+
+function parseDelayMinutes(rawDelayMinutes) {
+  if (rawDelayMinutes === undefined || rawDelayMinutes === null || rawDelayMinutes === "") {
+    return 0;
+  }
+
+  let parsed;
+  if (typeof rawDelayMinutes === "number") {
+    if (!Number.isInteger(rawDelayMinutes)) {
+      return null;
+    }
+    parsed = rawDelayMinutes;
+  } else if (typeof rawDelayMinutes === "string") {
+    const trimmed = rawDelayMinutes.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      return null;
+    }
+    parsed = Number(trimmed);
+  } else {
+    return null;
+  }
+
+  if (parsed < 0 || parsed > MAX_SCHEDULE_DELAY_MINUTES) {
+    return null;
+  }
+  return parsed;
+}
+
+function clampVolume(rawVolume) {
+  return Math.min(100, Math.max(0, parseInt(rawVolume) || 40));
+}
+
+async function runAnnouncementNow({ text, provider, voice, volume, addToHistory = true }) {
+  const selectedVoice = voice || getDefaultVoiceForProvider(config, provider);
+  const selectedVolume = clampVolume(volume);
+  const trimmedText = text.trim();
+
+  console.log(
+    `Announcing: "${trimmedText.substring(0, 50)}${trimmedText.length > 50 ? "..." : ""}" [provider=${provider}, voice=${selectedVoice}, vol=${selectedVolume}]`
+  );
+
+  const entry = addToHistory ? addEntry(trimmedText, selectedVoice, selectedVolume, provider) : null;
+
+  await announce(config, {
+    text: trimmedText,
+    voice: selectedVoice,
+    volume: selectedVolume,
+    provider,
+  });
+
+  return entry;
+}
+
+function scheduleAnnouncement({ text, provider, voice, volume }, delayMinutes) {
+  const delayMs = delayMinutes * 60 * 1000;
+  const scheduleId = `sch_${Date.now().toString(36)}${Math.random().toString(36).substring(2, 6)}`;
+  const runAtMs = Date.now() + delayMs;
+
+  const job = {
+    id: scheduleId,
+    text: text.trim(),
+    provider,
+    voice,
+    volume: clampVolume(volume),
+    retries: 0,
+    runAtMs,
+    timer: null,
+  };
+
+  const executeJob = async () => {
+    const currentJob = scheduledJobs.get(scheduleId);
+    if (!currentJob) {
+      return;
+    }
+
+    if (isPlaying()) {
+      if (currentJob.retries >= SCHEDULE_MAX_RETRIES) {
+        scheduledJobs.delete(scheduleId);
+        console.warn(
+          `Scheduled announcement dropped after waiting for playback slot [id=${scheduleId}]`
+        );
+        return;
+      }
+
+      currentJob.retries += 1;
+      currentJob.runAtMs = Date.now() + SCHEDULE_RETRY_MS;
+      currentJob.timer = setTimeout(executeJob, SCHEDULE_RETRY_MS);
+      return;
+    }
+
+    scheduledJobs.delete(scheduleId);
+
+    try {
+      await runAnnouncementNow(currentJob);
+    } catch (err) {
+      console.error(`Scheduled announcement failed [id=${scheduleId}]:`, err);
+    }
+  };
+
+  job.timer = setTimeout(executeJob, delayMs);
+  scheduledJobs.set(scheduleId, job);
+
+  return {
+    id: scheduleId,
+    runAt: new Date(runAtMs).toISOString(),
+  };
 }
 
 app.get("/api/providers", (req, res) => {
@@ -65,11 +176,17 @@ app.get("/api/voices", async (req, res) => {
 
 // Submit an announcement
 app.post("/api/announce", async (req, res) => {
-  const { text, voice, volume, provider } = req.body;
+  const { text, voice, volume, provider, delayMinutes } = req.body;
   const selectedProvider = parseRequestedProvider(provider, config.ttsProvider);
+  const selectedDelayMinutes = parseDelayMinutes(delayMinutes);
 
   if (!text || typeof text !== "string" || text.trim().length === 0) {
     return res.status(400).json({ error: "Text is required" });
+  }
+  if (selectedDelayMinutes === null) {
+    return res
+      .status(400)
+      .json({ error: `delayMinutes must be a number between 0 and ${MAX_SCHEDULE_DELAY_MINUTES}` });
   }
 
   if (!selectedProvider) {
@@ -86,25 +203,38 @@ app.post("/api/announce", async (req, res) => {
       .json({ error: `Text must be ${config.maxTextLength} characters or less` });
   }
 
-  if (isPlaying()) {
+  if (selectedDelayMinutes === 0 && isPlaying()) {
     return res.status(409).json({ error: "An announcement is already playing" });
   }
 
   const selectedVoice = voice || getDefaultVoiceForProvider(config, selectedProvider);
-  const selectedVolume = Math.min(100, Math.max(0, parseInt(volume) || 40));
+  const selectedVolume = clampVolume(volume);
 
   try {
-    console.log(
-      `Announcing: "${text.substring(0, 50)}${text.length > 50 ? "..." : ""}" [provider=${selectedProvider}, voice=${selectedVoice}, vol=${selectedVolume}]`
-    );
+    if (selectedDelayMinutes > 0) {
+      const schedule = scheduleAnnouncement(
+        {
+          text: text.trim(),
+          provider: selectedProvider,
+          voice: selectedVoice,
+          volume: selectedVolume,
+        },
+        selectedDelayMinutes
+      );
+      return res.json({
+        success: true,
+        scheduled: true,
+        id: schedule.id,
+        runAt: schedule.runAt,
+        delayMinutes: selectedDelayMinutes,
+      });
+    }
 
-    const entry = addEntry(text, selectedVoice, selectedVolume, selectedProvider);
-
-    await announce(config, {
-      text: text.trim(),
+    const entry = await runAnnouncementNow({
+      text,
+      provider: selectedProvider,
       voice: selectedVoice,
       volume: selectedVolume,
-      provider: selectedProvider,
     });
 
     res.json({ success: true, id: entry.id });
@@ -135,11 +265,12 @@ app.post("/api/replay/:id", async (req, res) => {
   }
 
   try {
-    await announce(config, {
+    await runAnnouncementNow({
       text: entry.text,
-      voice: entry.voice || getDefaultVoiceForProvider(config, replayProvider),
-      volume: Math.min(100, Math.max(0, parseInt(entry.volume) || 40)),
       provider: replayProvider,
+      voice: entry.voice || getDefaultVoiceForProvider(config, replayProvider),
+      volume: clampVolume(entry.volume),
+      addToHistory: false,
     });
 
     res.json({ success: true, id: entry.id });

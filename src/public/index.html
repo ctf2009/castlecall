@@ -424,7 +424,7 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1><span>🏰</span>CastleCall</h1>
+      <h1><span>&#127984;</span>CastleCall</h1>
       <p>Home announcement system</p>
     </div>
 
@@ -440,11 +440,11 @@
       </div>
 
       <div class="quick-phrases">
-        <button class="quick-phrase" data-text="Dinner's ready!">🍽️ Dinner's ready</button>
-        <button class="quick-phrase" data-text="Time to go!">🚗 Time to go</button>
-        <button class="quick-phrase" data-text="Phone's ringing!">📱 Phone ringing</button>
-        <button class="quick-phrase" data-text="Someone's at the door!">🚪 Door</button>
-        <button class="quick-phrase" data-text="Five minutes!">⏰ 5 minutes</button>
+        <button class="quick-phrase" data-text="Dinner's ready!">&#127869;&#65039; Dinner's ready</button>
+        <button class="quick-phrase" data-text="Time to go!">&#128663; Time to go</button>
+        <button class="quick-phrase" data-text="Phone's ringing!">&#128241; Phone ringing</button>
+        <button class="quick-phrase" data-text="Someone's at the door!">&#128682; Door</button>
+        <button class="quick-phrase" data-text="Five minutes!">&#9200; 5 minutes</button>
       </div>
 
       <div class="controls">
@@ -463,15 +463,26 @@
         <div class="control-group">
           <label>Volume</label>
           <div class="volume-row">
-            <span class="volume-icon">🔊</span>
+            <span class="volume-icon">&#128266;</span>
             <input type="range" id="volume" min="10" max="100" value="40" />
             <span class="volume-val" id="volumeVal">40%</span>
           </div>
         </div>
+        <div class="control-group">
+          <label>Delay</label>
+          <select id="delayMinutes">
+            <option value="0" selected>Now</option>
+            <option value="1">1m</option>
+            <option value="5">5m</option>
+            <option value="10">10m</option>
+            <option value="20">20m</option>
+            <option value="60">60m</option>
+          </select>
+        </div>
       </div>
 
       <button class="btn-announce" id="btnAnnounce">
-        📢 Announce
+        &#128227; Announce
       </button>
     </div>
 
@@ -493,6 +504,7 @@
     const providerEl = document.getElementById("provider");
     const voiceEl = document.getElementById("voice");
     const volumeEl = document.getElementById("volume");
+    const delayEl = document.getElementById("delayMinutes");
     const volumeValEl = document.getElementById("volumeVal");
     const btnEl = document.getElementById("btnAnnounce");
     const historyEl = document.getElementById("historyList");
@@ -674,7 +686,7 @@
       }
 
       btnEl.disabled = true;
-      btnEl.textContent = "🔊 Playing...";
+      btnEl.textContent = "\uD83D\uDD0A Playing...";
       btnEl.classList.add("playing");
 
       try {
@@ -686,6 +698,7 @@
             provider: providerEl.value,
             voice: voiceEl.value,
             volume: parseInt(volumeEl.value),
+            delayMinutes: parseInt(delayEl.value, 10) || 0,
           }),
         });
 
@@ -695,15 +708,21 @@
           throw new Error(data.error || "Failed");
         }
 
-        showToast("Announced!", "success");
+        if (data.scheduled) {
+          showToast(`Scheduled in ${data.delayMinutes}m`, "success");
+        } else {
+          showToast("Announced!", "success");
+        }
         textEl.value = "";
         textEl.dispatchEvent(new Event("input"));
-        loadHistory();
+        if (!data.scheduled) {
+          loadHistory();
+        }
       } catch (err) {
         showToast(err.message, "error");
       } finally {
         btnEl.disabled = false;
-        btnEl.textContent = "📢 Announce";
+        btnEl.textContent = "\uD83D\uDCE2 Announce";
         btnEl.classList.remove("playing");
       }
     }
@@ -765,7 +784,7 @@
     // Replay a past announcement (play immediately; do not populate the text box)
     window.replay = async (id) => {
       btnEl.disabled = true;
-      btnEl.textContent = "🔊 Playing...";
+      btnEl.textContent = "\uD83D\uDD0A Playing...";
       btnEl.classList.add("playing");
 
       try {
@@ -779,7 +798,7 @@
         showToast(err.message, "error");
       } finally {
         btnEl.disabled = false;
-        btnEl.textContent = "📢 Announce";
+        btnEl.textContent = "\uD83D\uDCE2 Announce";
         btnEl.classList.remove("playing");
       }
     };
@@ -816,6 +835,7 @@
       const selectedVolume = Math.min(100, Math.max(10, parseInt(entry.volume) || 40));
       volumeEl.value = selectedVolume;
       volumeValEl.textContent = `${selectedVolume}%`;
+      delayEl.value = "0";
 
       textEl.focus();
       textEl.setSelectionRange(textEl.value.length, textEl.value.length);
