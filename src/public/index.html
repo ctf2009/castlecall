@@ -391,6 +391,119 @@
       padding: 24px 0;
     }
 
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+
+    .tab.active {
+      background: var(--accent-glow);
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .tab:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    .panel[hidden] {
+      display: none !important;
+    }
+
+    .muted {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+
+    .status-banner {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .status-banner strong {
+      color: var(--text);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .stat {
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+    }
+
+    .stat-label {
+      display: block;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .stat-value {
+      display: block;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .stat-subtle {
+      display: block;
+      margin-top: 4px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .audio-preview {
+      width: 100%;
+      margin-top: 14px;
+    }
+
+    .preview-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .preview-actions .btn-announce {
+      margin-top: 0;
+    }
+
+    .song-history-prompt {
+      display: block;
+      font-size: 0.85rem;
+      line-height: 1.4;
+    }
+
     /* Status Toast */
     .toast {
       position: fixed;
@@ -428,77 +541,177 @@
       <p>Home announcement system</p>
     </div>
 
-    <div class="card">
-      <div class="textarea-wrap">
-        <textarea
-          id="text"
-          placeholder="Type your announcement..."
-          maxlength="500"
-          autofocus
-        ></textarea>
-        <span class="char-count" id="charCount">0 / 500</span>
-      </div>
+    <div class="tabs">
+      <button class="tab active" id="tabAnnounce">Announcements</button>
+      <button class="tab" id="tabMusic">Song Studio</button>
+    </div>
 
-      <div class="quick-phrases">
-        <button class="quick-phrase" data-text="Dinner's ready!">&#127869;&#65039; Dinner's ready</button>
-        <button class="quick-phrase" data-text="Time to go!">&#128663; Time to go</button>
-        <button class="quick-phrase" data-text="Phone's ringing!">&#128241; Phone ringing</button>
-        <button class="quick-phrase" data-text="Someone's at the door!">&#128682; Door</button>
-        <button class="quick-phrase" data-text="Five minutes!">&#9200; 5 minutes</button>
-      </div>
-
-      <div class="controls">
-        <div class="control-group">
-          <label>Provider</label>
-          <select id="provider"></select>
+    <section class="panel" id="announcePanel">
+      <div class="card">
+        <div class="textarea-wrap">
+          <textarea
+            id="text"
+            placeholder="Type your announcement..."
+            maxlength="500"
+            autofocus
+          ></textarea>
+          <span class="char-count" id="charCount">0 / 500</span>
         </div>
 
-        <div class="control-group">
-          <label>Voice</label>
-          <select id="voice"></select>
+        <div class="quick-phrases">
+          <button class="quick-phrase" data-text="Dinner's ready!">&#127869;&#65039; Dinner's ready</button>
+          <button class="quick-phrase" data-text="Time to go!">&#128663; Time to go</button>
+          <button class="quick-phrase" data-text="Phone's ringing!">&#128241; Phone ringing</button>
+          <button class="quick-phrase" data-text="Someone's at the door!">&#128682; Door</button>
+          <button class="quick-phrase" data-text="Five minutes!">&#9200; 5 minutes</button>
         </div>
-      </div>
 
-      <div class="controls">
-        <div class="control-group">
-          <label>Volume</label>
-          <div class="volume-row">
-            <span class="volume-icon">&#128266;</span>
-            <input type="range" id="volume" min="10" max="100" value="40" />
-            <span class="volume-val" id="volumeVal">40%</span>
+        <div class="controls">
+          <div class="control-group">
+            <label>Provider</label>
+            <select id="provider"></select>
+          </div>
+
+          <div class="control-group">
+            <label>Voice</label>
+            <select id="voice"></select>
           </div>
         </div>
-        <div class="control-group">
-          <label>Delay</label>
-          <select id="delayMinutes">
-            <option value="0" selected>Now</option>
-            <option value="1">1m</option>
-            <option value="5">5m</option>
-            <option value="10">10m</option>
-            <option value="20">20m</option>
-            <option value="60">60m</option>
-          </select>
+
+        <div class="controls">
+          <div class="control-group">
+            <label>Volume</label>
+            <div class="volume-row">
+              <span class="volume-icon">&#128266;</span>
+              <input type="range" id="volume" min="10" max="100" value="40" />
+              <span class="volume-val" id="volumeVal">40%</span>
+            </div>
+          </div>
+          <div class="control-group">
+            <label>Delay</label>
+            <select id="delayMinutes">
+              <option value="0" selected>Now</option>
+              <option value="1">1m</option>
+              <option value="5">5m</option>
+              <option value="10">10m</option>
+              <option value="20">20m</option>
+              <option value="60">60m</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="btn-announce" id="btnAnnounce">
+          &#128227; Announce
+        </button>
+      </div>
+
+      <div class="card">
+        <div class="history-header">
+          <h2>Recent Announcements</h2>
+        </div>
+        <ul class="history-list" id="historyList">
+          <li class="empty-state">No announcements yet</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="panel" id="musicPanel" hidden>
+      <div class="card">
+        <div class="textarea-wrap">
+          <textarea
+            id="musicPrompt"
+            placeholder="Describe the song you want. Example: A song to tell Arlo and Zoey it's time for daycare."
+            maxlength="240"
+          ></textarea>
+          <span class="char-count" id="musicCharCount">0 / 240</span>
+        </div>
+
+        <p class="muted">
+          Generates exactly one 30-second song with ElevenLabs. Preview it in the browser, then announce it on CastleCall when ready.
+        </p>
+
+        <div class="quick-phrases">
+          <button class="quick-phrase music-preset" data-prompt="A playful song to tell Arlo and Zoey it's time for daycare.">Daycare</button>
+          <button class="quick-phrase music-preset" data-prompt="A cheerful cleanup song for the kids with a catchy chorus about packing toys away.">Cleanup</button>
+          <button class="quick-phrase music-preset" data-prompt="A cozy bedtime song for the kids with soft lyrics about winding down and going to sleep.">Bedtime</button>
+          <button class="quick-phrase music-preset" data-prompt="A bright morning song for the kids about waking up, getting dressed, and starting the day.">Morning</button>
+        </div>
+
+        <div class="controls">
+          <div class="control-group">
+            <label>Volume</label>
+            <div class="volume-row">
+              <span class="volume-icon">&#127911;</span>
+              <input type="range" id="musicVolume" min="10" max="100" value="55" />
+              <span class="volume-val" id="musicVolumeVal">55%</span>
+            </div>
+          </div>
+          <div class="control-group">
+            <label>Length</label>
+            <select id="musicLength" disabled>
+              <option value="30000" selected>30s fixed</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="btn-announce" id="btnMusic" disabled>
+          &#127926; Generate Song
+        </button>
+
+        <audio class="audio-preview" id="musicPreview" controls preload="none" hidden></audio>
+        <div class="preview-actions" id="musicPreviewActions" hidden>
+          <button class="btn-announce" id="btnPreviewToDevice">
+            &#128266; Announce On CastleCall
+          </button>
+        </div>
+
+        <div class="status-banner" id="musicStatusBanner">
+          <strong>Checking Song Studio...</strong> Validating ElevenLabs access.
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat">
+            <span class="stat-label">Plan</span>
+            <span class="stat-value" id="musicPlanValue">Unavailable</span>
+            <span class="stat-subtle" id="musicPlanSubtle">Waiting for a valid ElevenLabs key</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Remaining</span>
+            <span class="stat-value" id="musicRemainingValue">-</span>
+            <span class="stat-subtle" id="musicRemainingSubtle">Account credits</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">30d Usage</span>
+            <span class="stat-value" id="musicUsageValue">-</span>
+            <span class="stat-subtle" id="musicUsageSubtle">Credits used</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Local Songs</span>
+            <span class="stat-value" id="musicLocalValue">0</span>
+            <span class="stat-subtle" id="musicLocalSubtle">Fresh generations</span>
+          </div>
         </div>
       </div>
 
-      <button class="btn-announce" id="btnAnnounce">
-        &#128227; Announce
-      </button>
-    </div>
-
-    <div class="card">
-      <div class="history-header">
-        <h2>Recent Announcements</h2>
+      <div class="card">
+        <div class="history-header">
+          <h2>Recent Songs</h2>
+        </div>
+        <ul class="history-list" id="musicHistoryList">
+          <li class="empty-state">No songs yet</li>
+        </ul>
       </div>
-      <ul class="history-list" id="historyList">
-        <li class="empty-state">No announcements yet</li>
-      </ul>
-    </div>
+    </section>
   </div>
 
   <div class="toast" id="toast"></div>
 
   <script>
+    const announcePanelEl = document.getElementById("announcePanel");
+    const musicPanelEl = document.getElementById("musicPanel");
+    const tabAnnounceEl = document.getElementById("tabAnnounce");
+    const tabMusicEl = document.getElementById("tabMusic");
+
     const textEl = document.getElementById("text");
     const charCountEl = document.getElementById("charCount");
     const providerEl = document.getElementById("provider");
@@ -508,10 +721,35 @@
     const volumeValEl = document.getElementById("volumeVal");
     const btnEl = document.getElementById("btnAnnounce");
     const historyEl = document.getElementById("historyList");
+
+    const musicPromptEl = document.getElementById("musicPrompt");
+    const musicCharCountEl = document.getElementById("musicCharCount");
+    const musicVolumeEl = document.getElementById("musicVolume");
+    const musicVolumeValEl = document.getElementById("musicVolumeVal");
+    const btnMusicEl = document.getElementById("btnMusic");
+    const musicPreviewEl = document.getElementById("musicPreview");
+    const musicPreviewActionsEl = document.getElementById("musicPreviewActions");
+    const btnPreviewToDeviceEl = document.getElementById("btnPreviewToDevice");
+    const musicStatusBannerEl = document.getElementById("musicStatusBanner");
+    const musicHistoryEl = document.getElementById("musicHistoryList");
+    const musicPlanValueEl = document.getElementById("musicPlanValue");
+    const musicPlanSubtleEl = document.getElementById("musicPlanSubtle");
+    const musicRemainingValueEl = document.getElementById("musicRemainingValue");
+    const musicRemainingSubtleEl = document.getElementById("musicRemainingSubtle");
+    const musicUsageValueEl = document.getElementById("musicUsageValue");
+    const musicUsageSubtleEl = document.getElementById("musicUsageSubtle");
+    const musicLocalValueEl = document.getElementById("musicLocalValue");
+    const musicLocalSubtleEl = document.getElementById("musicLocalSubtle");
+
     const toastEl = document.getElementById("toast");
 
-    let maxLength = 500;
+    const maxLength = 500;
+    const musicMaxLength = 240;
+    let activeTab = "announce";
     let historyById = new Map();
+    let songHistoryById = new Map();
+    let selectedSongId = null;
+    let musicReady = false;
     const voiceNameByProvider = new Map();
 
     function normalizeProviderId(provider) {
@@ -566,6 +804,130 @@
       return fallbackVoiceName(provider, voiceId);
     }
 
+    function setCounter(inputEl, counterEl, limit) {
+      const length = inputEl.value.length;
+      counterEl.textContent = `${length} / ${limit}`;
+      counterEl.classList.toggle("warn", length > limit - 50);
+    }
+
+    function setVolumeLabel(inputEl, labelEl) {
+      labelEl.textContent = `${inputEl.value}%`;
+    }
+
+    function setButtonBusy(buttonEl, idleText, busyText, isBusy) {
+      buttonEl.disabled = isBusy;
+      buttonEl.textContent = isBusy ? busyText : idleText;
+      buttonEl.classList.toggle("playing", isBusy);
+    }
+
+    function setActiveTab(tab) {
+      const nextTab = tab === "music" ? "music" : "announce";
+      activeTab = nextTab;
+
+      announcePanelEl.hidden = nextTab !== "announce";
+      musicPanelEl.hidden = nextTab !== "music";
+      tabAnnounceEl.classList.toggle("active", nextTab === "announce");
+      tabMusicEl.classList.toggle("active", nextTab === "music");
+    }
+
+    function formatCount(value) {
+      if (!Number.isFinite(value)) {
+        return "-";
+      }
+      return Number(value).toLocaleString();
+    }
+
+    function formatReset(unixSeconds) {
+      if (!unixSeconds) {
+        return "Reset date unavailable";
+      }
+      return `Resets ${new Date(unixSeconds * 1000).toLocaleString()}`;
+    }
+
+    function updateMusicStatusUi(status) {
+      const enabled = Boolean(status && status.enabled);
+      const subscription = status && status.subscription;
+      const recentUsage = status && status.recentUsage;
+      const stats = (status && status.stats) || {};
+      musicReady = enabled;
+
+      tabMusicEl.textContent = "Song Studio";
+      btnMusicEl.disabled = !enabled;
+      if (!enabled || !selectedSongId) {
+        musicPreviewActionsEl.hidden = true;
+      }
+
+      if (enabled) {
+        const issue = status.reason ? ` Usage details limited: ${status.reason}` : "";
+        musicStatusBannerEl.innerHTML =
+          `<strong>Song Studio ready.</strong> Fixed 30-second generation through ElevenLabs.${escapeHtml(issue)}`;
+      } else {
+        musicStatusBannerEl.innerHTML =
+          `<strong>Song Studio unavailable.</strong> ${escapeHtml((status && status.reason) || "Valid key required.")}`;
+      }
+
+      musicPlanValueEl.textContent = subscription ? subscription.tier || "Available" : "Unavailable";
+      musicPlanSubtleEl.textContent = subscription
+        ? `${subscription.status || "active"} plan`
+        : enabled
+          ? "Music may still work even if usage data is hidden"
+          : "Waiting for a valid ElevenLabs key";
+
+      if (subscription) {
+        musicRemainingValueEl.textContent =
+          `${formatCount(subscription.remainingCharacters)} / ${formatCount(subscription.characterLimit)}`;
+        musicRemainingSubtleEl.textContent = formatReset(subscription.nextResetUnix);
+      } else {
+        musicRemainingValueEl.textContent = "-";
+        musicRemainingSubtleEl.textContent = "Account credits";
+      }
+
+      if (recentUsage && Number.isFinite(recentUsage.total)) {
+        musicUsageValueEl.textContent = formatCount(recentUsage.total);
+        musicUsageSubtleEl.textContent = `Credits used in last ${recentUsage.windowDays} days`;
+      } else {
+        musicUsageValueEl.textContent = "-";
+        musicUsageSubtleEl.textContent = "Usage unavailable";
+      }
+
+      musicLocalValueEl.textContent = formatCount(stats.generatedCount || 0);
+      musicLocalSubtleEl.textContent = `${formatCount(stats.cacheHitCount || 0)} cache hits`;
+    }
+
+    function setMusicPrompt(prompt, options = {}) {
+      musicPromptEl.value = prompt || "";
+      setCounter(musicPromptEl, musicCharCountEl, musicMaxLength);
+
+      if (options.focus) {
+        musicPromptEl.focus();
+        musicPromptEl.setSelectionRange(musicPromptEl.value.length, musicPromptEl.value.length);
+      }
+    }
+
+    function loadSongPreview(song, autoplay = false) {
+      if (!song || !song.previewUrl) {
+        selectedSongId = null;
+        musicPreviewEl.hidden = true;
+        musicPreviewActionsEl.hidden = true;
+        musicPreviewEl.removeAttribute("src");
+        musicPreviewEl.load();
+        return;
+      }
+
+      selectedSongId = song.id;
+      const previewUrl = `${song.previewUrl}?t=${Date.now()}`;
+      musicPreviewEl.hidden = false;
+      musicPreviewActionsEl.hidden = !musicReady;
+      musicPreviewEl.src = previewUrl;
+      musicPreviewEl.load();
+
+      if (autoplay) {
+        musicPreviewEl.play().catch(() => {
+          // Ignore autoplay failures; controls stay available.
+        });
+      }
+    }
+
     async function cacheVoices(provider) {
       const normalizedProvider = normalizeProviderId(provider);
       if (voiceNameByProvider.has(normalizedProvider)) {
@@ -591,22 +953,36 @@
 
     // Character count
     textEl.addEventListener("input", () => {
-      const len = textEl.value.length;
-      charCountEl.textContent = `${len} / ${maxLength}`;
-      charCountEl.classList.toggle("warn", len > maxLength - 50);
+      setCounter(textEl, charCountEl, maxLength);
+    });
+
+    musicPromptEl.addEventListener("input", () => {
+      setCounter(musicPromptEl, musicCharCountEl, musicMaxLength);
     });
 
     // Volume display
     volumeEl.addEventListener("input", () => {
-      volumeValEl.textContent = `${volumeEl.value}%`;
+      setVolumeLabel(volumeEl, volumeValEl);
+    });
+
+    musicVolumeEl.addEventListener("input", () => {
+      setVolumeLabel(musicVolumeEl, musicVolumeValEl);
     });
 
     // Quick phrases
-    document.querySelectorAll(".quick-phrase").forEach((btn) => {
+    document.querySelectorAll(".quick-phrase[data-text]").forEach((btn) => {
       btn.addEventListener("click", () => {
+        setActiveTab("announce");
         textEl.value = btn.dataset.text;
-        textEl.dispatchEvent(new Event("input"));
+        setCounter(textEl, charCountEl, maxLength);
         textEl.focus();
+      });
+    });
+
+    document.querySelectorAll(".music-preset").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        setActiveTab("music");
+        setMusicPrompt(btn.dataset.prompt || "");
       });
     });
 
@@ -673,8 +1049,72 @@
       }
     }
 
+    async function loadMusicStatus() {
+      try {
+        const res = await fetch("/api/music/status");
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to load music status");
+        }
+        updateMusicStatusUi(data);
+      } catch (err) {
+        updateMusicStatusUi({
+          enabled: false,
+          reason: err.message || "Failed to load music status",
+          stats: { generatedCount: 0, cacheHitCount: 0 },
+        });
+      }
+    }
+
+    async function loadSongHistory() {
+      try {
+        const res = await fetch("/api/music/history");
+        const data = await res.json();
+        const history = Array.isArray(data.history) ? data.history : [];
+        songHistoryById = new Map(history.map((entry) => [entry.id, entry]));
+
+        if (history.length === 0) {
+          musicHistoryEl.innerHTML = '<li class="empty-state">No songs yet</li>';
+          return;
+        }
+
+        musicHistoryEl.innerHTML = history
+          .map(
+            (song) => `
+          <li class="history-item">
+            <div class="history-main">
+              <span class="song-history-prompt">${escapeHtml(song.prompt)}</span>
+              <div class="history-details">
+                <span class="history-chip history-provider">Song</span>
+                <span class="history-chip history-voice">${song.cached ? "cached" : "fresh"}</span>
+              </div>
+            </div>
+            <div class="history-actions">
+              <span class="history-meta">${timeAgo(song.timestamp)}</span>
+              <button class="history-replay" onclick="previewSong('${song.id}')" aria-label="Preview">Play</button>
+              <button class="history-edit" onclick="useSongPrompt('${song.id}')" aria-label="Reuse">Use</button>
+              <button class="history-replay" onclick="replaySong('${song.id}')" aria-label="Replay">\u21bb</button>
+              <button class="history-delete" onclick="deleteSong('${song.id}')" aria-label="Delete">X</button>
+            </div>
+          </li>
+        `
+          )
+          .join("");
+      } catch {
+        // ignore
+      }
+    }
+
     providerEl.addEventListener("change", () => {
       loadVoices(providerEl.value);
+    });
+
+    tabAnnounceEl.addEventListener("click", () => {
+      setActiveTab("announce");
+    });
+
+    tabMusicEl.addEventListener("click", () => {
+      setActiveTab("music");
     });
 
     // Submit announcement
@@ -685,9 +1125,7 @@
         return;
       }
 
-      btnEl.disabled = true;
-      btnEl.textContent = "\uD83D\uDD0A Playing...";
-      btnEl.classList.add("playing");
+      setButtonBusy(btnEl, "\uD83D\uDCE2 Announce", "\uD83D\uDD0A Playing...", true);
 
       try {
         const res = await fetch("/api/announce", {
@@ -697,7 +1135,7 @@
             text,
             provider: providerEl.value,
             voice: voiceEl.value,
-            volume: parseInt(volumeEl.value),
+            volume: parseInt(volumeEl.value, 10),
             delayMinutes: parseInt(delayEl.value, 10) || 0,
           }),
         });
@@ -714,26 +1152,126 @@
           showToast("Announced!", "success");
         }
         textEl.value = "";
-        textEl.dispatchEvent(new Event("input"));
+        setCounter(textEl, charCountEl, maxLength);
         if (!data.scheduled) {
           loadHistory();
         }
       } catch (err) {
         showToast(err.message, "error");
       } finally {
-        btnEl.disabled = false;
-        btnEl.textContent = "\uD83D\uDCE2 Announce";
-        btnEl.classList.remove("playing");
+        setButtonBusy(btnEl, "\uD83D\uDCE2 Announce", "\uD83D\uDD0A Playing...", false);
       }
     }
 
+    async function submitSong() {
+      const prompt = musicPromptEl.value.trim();
+      if (!prompt) {
+        showToast("Describe the song first!", "error");
+        return;
+      }
+
+      setButtonBusy(btnMusicEl, "\uD83C\uDFB6 Generate Song", "\uD83D\uDEE0 Generating...", true);
+
+      try {
+        const res = await fetch("/api/music", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt,
+            volume: parseInt(musicVolumeEl.value, 10),
+          }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Failed");
+        }
+
+        const song = data.song || null;
+        musicPromptEl.value = "";
+        setCounter(musicPromptEl, musicCharCountEl, musicMaxLength);
+        if (song) {
+          songHistoryById.set(song.id, song);
+          loadSongPreview(song, false);
+        }
+        showToast("Song generated. Preview it or announce it when ready.", "success");
+        loadMusicStatus();
+        loadSongHistory();
+      } catch (err) {
+        showToast(err.message, "error");
+      } finally {
+        setButtonBusy(btnMusicEl, "\uD83C\uDFB6 Generate Song", "\uD83D\uDEE0 Generating...", false);
+      }
+    }
+
+    async function replaySongById(id, source = "history") {
+      const song = songHistoryById.get(id);
+      if (!song) {
+        showToast("Song not found", "error");
+        return;
+      }
+
+      const buttonEl = source === "preview" ? btnPreviewToDeviceEl : btnMusicEl;
+      const idleText =
+        source === "preview"
+          ? "\uD83D\uDD0A Announce On CastleCall"
+          : "\uD83C\uDFB6 Generate Song";
+      const busyText =
+        source === "preview"
+          ? "\uD83D\uDD0A Announcing..."
+          : "\uD83D\uDD0A Announcing...";
+
+      setButtonBusy(buttonEl, idleText, busyText, true);
+
+      try {
+        const res = await fetch(`/api/music/replay/${encodeURIComponent(id)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            volume: parseInt(musicVolumeEl.value, 10),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Failed");
+        }
+
+        if (data.song) {
+          songHistoryById.set(data.song.id, data.song);
+        }
+        showToast("Song announced on CastleCall", "success");
+      } catch (err) {
+        showToast(err.message, "error");
+      } finally {
+        setButtonBusy(buttonEl, idleText, busyText, false);
+      }
+    }
+
+    async function replaySelectedSongToDevice() {
+      if (!selectedSongId) {
+        showToast("Choose or generate a song first", "error");
+        return;
+      }
+
+      await replaySongById(selectedSongId, "preview");
+    }
+
     btnEl.addEventListener("click", submitAnnouncement);
+    btnMusicEl.addEventListener("click", submitSong);
+    btnPreviewToDeviceEl.addEventListener("click", replaySelectedSongToDevice);
 
     // Ctrl+Enter / Cmd+Enter to submit
     textEl.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
         submitAnnouncement();
+      }
+    });
+
+    musicPromptEl.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        submitSong();
       }
     });
 
@@ -783,9 +1321,7 @@
 
     // Replay a past announcement (play immediately; do not populate the text box)
     window.replay = async (id) => {
-      btnEl.disabled = true;
-      btnEl.textContent = "\uD83D\uDD0A Playing...";
-      btnEl.classList.add("playing");
+      setButtonBusy(btnEl, "\uD83D\uDCE2 Announce", "\uD83D\uDD0A Playing...", true);
 
       try {
         const res = await fetch(`/api/replay/${encodeURIComponent(id)}`, { method: "POST" });
@@ -797,9 +1333,7 @@
       } catch (err) {
         showToast(err.message, "error");
       } finally {
-        btnEl.disabled = false;
-        btnEl.textContent = "\uD83D\uDCE2 Announce";
-        btnEl.classList.remove("playing");
+        setButtonBusy(btnEl, "\uD83D\uDCE2 Announce", "\uD83D\uDD0A Playing...", false);
       }
     };
 
@@ -810,8 +1344,9 @@
         return;
       }
 
+      setActiveTab("announce");
       textEl.value = entry.text || "";
-      textEl.dispatchEvent(new Event("input"));
+      setCounter(textEl, charCountEl, maxLength);
 
       const targetProvider = entry.provider || providerEl.value || "piper";
       const providerOption = Array.from(providerEl.options).find(
@@ -832,9 +1367,9 @@
         }
       }
 
-      const selectedVolume = Math.min(100, Math.max(10, parseInt(entry.volume) || 40));
+      const selectedVolume = Math.min(100, Math.max(10, parseInt(entry.volume, 10) || 40));
       volumeEl.value = selectedVolume;
-      volumeValEl.textContent = `${selectedVolume}%`;
+      setVolumeLabel(volumeEl, volumeValEl);
       delayEl.value = "0";
 
       textEl.focus();
@@ -858,6 +1393,54 @@
       }
     };
 
+    window.previewSong = (id) => {
+      const song = songHistoryById.get(id);
+      if (!song) {
+        showToast("Song not found", "error");
+        return;
+      }
+
+      setActiveTab("music");
+      loadSongPreview(song, true);
+    };
+
+    window.useSongPrompt = (id) => {
+      const song = songHistoryById.get(id);
+      if (!song) {
+        showToast("Song not found", "error");
+        return;
+      }
+
+      setActiveTab("music");
+      setMusicPrompt(song.prompt || "");
+      showToast("Loaded song prompt", "success");
+    };
+
+    window.replaySong = async (id) => {
+      await replaySongById(id, "history");
+    };
+
+    window.deleteSong = async (id) => {
+      try {
+        const res = await fetch(`/api/music/history/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Failed");
+        }
+
+        if (songHistoryById.has(id) && musicPreviewEl.src.includes(`/api/music/file/${encodeURIComponent(id)}`)) {
+          loadSongPreview(null);
+        }
+        songHistoryById.delete(id);
+        showToast("Removed song", "success");
+        loadSongHistory();
+      } catch (err) {
+        showToast(err.message, "error");
+      }
+    };
+
     // Toast notification
     let toastTimeout;
     function showToast(msg, type) {
@@ -872,7 +1455,7 @@
     // Helpers
     function escapeHtml(str) {
       const div = document.createElement("div");
-      div.textContent = str;
+      div.textContent = str == null ? "" : String(str);
       return div.innerHTML;
     }
 
@@ -886,9 +1469,17 @@
 
     // Init
     async function init() {
+      setCounter(textEl, charCountEl, maxLength);
+      setCounter(musicPromptEl, musicCharCountEl, musicMaxLength);
+      setVolumeLabel(volumeEl, volumeValEl);
+      setVolumeLabel(musicVolumeEl, musicVolumeValEl);
       await loadProviders();
       await loadVoices(providerEl.value);
+      await loadMusicStatus();
       loadHistory();
+      loadSongHistory();
+      loadSongPreview(null);
+      setActiveTab("announce");
     }
 
     init();

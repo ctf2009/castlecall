@@ -7,9 +7,24 @@ const { ElevenLabsClient } = require("@elevenlabs/elevenlabs-js");
 
 const CACHE_DIR = path.join(os.tmpdir(), "castlecall-cache");
 const PROVIDERS = ["piper", "elevenlabs"];
+const MUSIC_MODEL_ID = "music_v1";
+const MUSIC_DURATION_MS = 30000;
+const MUSIC_OUTPUT_FORMAT = "mp3_22050_32";
+const MUSIC_ACCESS_TTL_MS = 5 * 60 * 1000;
 
 let currentlyPlaying = false;
 let elevenLabsClientState = null;
+let musicAccessState = {
+  key: null,
+  checkedAt: 0,
+  enabled: null,
+  reason: null,
+};
+const musicStats = {
+  generatedCount: 0,
+  cacheHitCount: 0,
+  lastGeneratedAt: null,
+};
 
 function normalizeProvider(provider) {
   return provider === "elevenlabs" ? "elevenlabs" : "piper";
@@ -38,6 +53,63 @@ function getProviders(config) {
         reason: elevenlabsEnabled ? undefined : "Set ELEVENLABS_API_KEY in .env",
       },
     ],
+  };
+}
+
+function isMusicConfigured(config) {
+  return Boolean(config.elevenlabsApiKey);
+}
+
+async function getMusicAccess(config) {
+  if (!config.elevenlabsApiKey) {
+    return {
+      enabled: false,
+      reason: "Valid ElevenLabs key required",
+    };
+  }
+
+  const now = Date.now();
+  if (
+    musicAccessState.key === config.elevenlabsApiKey &&
+    musicAccessState.enabled !== null &&
+    now - musicAccessState.checkedAt < MUSIC_ACCESS_TTL_MS
+  ) {
+    return {
+      enabled: musicAccessState.enabled,
+      reason: musicAccessState.reason,
+    };
+  }
+
+  try {
+    const elevenlabs = getElevenLabsClient(config);
+    await elevenlabs.music.compositionPlan.create({
+      prompt:
+        "A short upbeat instrumental song with energetic rhythms, catchy melodies, and lively instrumentation.",
+      musicLengthMs: MUSIC_DURATION_MS,
+      modelId: MUSIC_MODEL_ID,
+    });
+
+    musicAccessState = {
+      key: config.elevenlabsApiKey,
+      checkedAt: now,
+      enabled: true,
+      reason: null,
+    };
+  } catch (error) {
+    const status = error?.statusCode || error?.status;
+    const isPermissionFailure = status === 401 || status === 403;
+
+    musicAccessState = {
+      key: config.elevenlabsApiKey,
+      checkedAt: now,
+      enabled: !isPermissionFailure,
+      reason: getElevenLabsErrorMessage(error, { feature: "music" }),
+    };
+  }
+
+  return {
+    enabled: musicAccessState.enabled,
+    reason: musicAccessState.reason,
   };
 }
 
@@ -117,6 +189,98 @@ function announce(config, { text, voice, volume, provider: providerInput }) {
         reject(err);
       });
   });
+}
+
+function getMusicPlaybackOptions() {
+  return {
+    preferSox: true,
+    allowAplayFallback: false,
+    missingPlayerMessage:
+      "Music playback requires sox/play for MP3 files. Install sox: sudo apt-get install sox",
+  };
+}
+
+async function prepareSong(config, { prompt }) {
+  const trimmedPrompt = String(prompt || "").trim();
+  const useCache = config.cacheEnabled !== false;
+
+  if (!trimmedPrompt) {
+    throw new Error("A song prompt is required");
+  }
+
+  if (!config.elevenlabsApiKey) {
+    throw new Error("ElevenLabs is not configured (missing ELEVENLABS_API_KEY)");
+  }
+
+  ensureCacheDir();
+
+  const outputFile = useCache
+    ? getMusicCacheFilePath(trimmedPrompt, MUSIC_MODEL_ID, MUSIC_OUTPUT_FORMAT)
+    : getMusicSessionFilePath();
+
+  if (useCache && fs.existsSync(outputFile)) {
+    touchFile(outputFile);
+    musicStats.cacheHitCount += 1;
+    return {
+      filePath: outputFile,
+      cached: true,
+      durationMs: MUSIC_DURATION_MS,
+      outputFormat: MUSIC_OUTPUT_FORMAT,
+      prompt: trimmedPrompt,
+    };
+  }
+
+  try {
+    await generateSongWithElevenLabs(config, {
+      prompt: trimmedPrompt,
+      outputFile,
+    });
+  } catch (error) {
+    cleanup(outputFile);
+    throw error;
+  }
+
+  if (!fs.existsSync(outputFile)) {
+    throw new Error("ElevenLabs did not produce a music file");
+  }
+
+  musicStats.generatedCount += 1;
+  musicStats.lastGeneratedAt = new Date().toISOString();
+
+  touchFile(outputFile);
+  enforceCacheLimit(config.cacheMaxFiles);
+
+  return {
+    filePath: outputFile,
+    cached: false,
+    durationMs: MUSIC_DURATION_MS,
+    outputFormat: MUSIC_OUTPUT_FORMAT,
+    prompt: trimmedPrompt,
+  };
+}
+
+function playSongFile(config, { filePath, volume }) {
+  return new Promise((resolve, reject) => {
+    currentlyPlaying = true;
+
+    if (!filePath || !fs.existsSync(filePath)) {
+      currentlyPlaying = false;
+      return reject(new Error("Song file is no longer available"));
+    }
+
+    const selectedVolume = Math.min(100, Math.max(0, parseInt(volume) || 40));
+    touchFile(filePath);
+    playAudioFile(config, filePath, selectedVolume, resolve, reject, false, getMusicPlaybackOptions());
+  });
+}
+
+async function playSong(config, { prompt, volume }) {
+  const preparedSong = await prepareSong(config, { prompt });
+  await playSongFile(config, {
+    filePath: preparedSong.filePath,
+    volume,
+  });
+  return preparedSong;
 }
 
 async function getPiperVoices(config) {
@@ -283,6 +447,23 @@ async function generateWithElevenLabs(config, { text, voice, outputFile }) {
   }
 }
 
+async function generateSongWithElevenLabs(config, { prompt, outputFile }) {
+  try {
+    const elevenlabs = getElevenLabsClient(config);
+    const audioStream = await elevenlabs.music.compose({
+      prompt,
+      musicLengthMs: MUSIC_DURATION_MS,
+      modelId: MUSIC_MODEL_ID,
+      outputFormat: MUSIC_OUTPUT_FORMAT,
+    });
+
+    const audioBuffer = await audioToBuffer(audioStream);
+    fs.writeFileSync(outputFile, audioBuffer);
+  } catch (error) {
+    throw new Error(getElevenLabsErrorMessage(error, { feature: "music" }));
+  }
+}
+
 function getElevenLabsClient(config) {
   const timeoutInSeconds = getTimeoutSeconds(config.elevenlabsTimeoutMs);
   const key = `${config.elevenlabsApiKey}:${timeoutInSeconds}`;
@@ -384,12 +565,18 @@ function pcm16MonoToWav(pcmBuffer, sampleRate) {
   return Buffer.concat([header, pcmBuffer]);
 }
 
-function getElevenLabsErrorMessage(error) {
+function getElevenLabsErrorMessage(error, options = {}) {
   const status = error?.statusCode || error?.status;
   const body = error?.body;
   const details = body?.detail?.message || body?.detail || body?.message || error?.message || "";
 
   if (status === 401 || status === 403) {
+    if (status === 403 && options.feature === "music") {
+      return "ElevenLabs key does not allow music generation. Use a key with music_generation permission.";
+    }
+    if (status === 403 && options.feature === "usage") {
+      return "ElevenLabs key does not allow usage reporting. Add user_read permission to view usage.";
+    }
     return "ElevenLabs authentication failed. Check ELEVENLABS_API_KEY.";
   }
   if (status === 429) {
@@ -407,9 +594,16 @@ function getElevenLabsErrorMessage(error) {
   return "ElevenLabs request failed";
 }
 
-function playAudioFile(config, audioFile, volume, resolve, reject, cleanupOnFinish) {
-  if (volume < 100) {
-    const play = spawn("play", [audioFile, "vol", (volume / 100).toFixed(2)], {
+function playAudioFile(config, audioFile, volume, resolve, reject, cleanupOnFinish, options = {}) {
+  const shouldUsePlay = options.preferSox || volume < 100;
+
+  if (shouldUsePlay) {
+    const playArgs = [audioFile];
+    if (volume < 100) {
+      playArgs.push("vol", (volume / 100).toFixed(2));
+    }
+
+    const play = spawn("play", playArgs, {
       stdio: ["ignore", "ignore", "pipe"],
     });
 
@@ -421,6 +615,20 @@ function playAudioFile(config, audioFile, volume, resolve, reject, cleanupOnFini
     });
 
     play.on("error", () => {
+      if (options.allowAplayFallback === false) {
+        currentlyPlaying = false;
+        if (cleanupOnFinish) {
+          cleanup(audioFile);
+        }
+        reject(
+          new Error(
+            options.missingPlayerMessage ||
+              "sox/play is required for this audio format. Install sox: sudo apt-get install sox"
+          )
+        );
+        return;
+      }
+
       fallbackToAplay = true;
       console.warn(
         "sox/play not found, using aplay (volume control unavailable). Install sox: sudo apt-get install sox"
@@ -495,6 +703,22 @@ function getCacheFilePath(provider, voice, text, modelId) {
   return path.join(CACHE_DIR, `${safeProvider}-${safeVoice}-${hash}.wav`);
 }
 
+function getMusicCacheFilePath(prompt, modelId, outputFormat) {
+  const extension = String(outputFormat || "").startsWith("mp3_") ? "mp3" : "bin";
+  const hash = crypto
+    .createHash("sha1")
+    .update(`music\n${modelId || ""}\n${outputFormat || ""}\n${prompt}`)
+    .digest("hex");
+  return path.join(CACHE_DIR, `music-${hash}.${extension}`);
+}
+
+function getMusicSessionFilePath() {
+  return path.join(
+    CACHE_DIR,
+    `music-${Date.now().toString(36)}${Math.random().toString(36).substring(2, 6)}.mp3`
+  );
+}
+
 function ensureCacheDir() {
   if (!fs.existsSync(CACHE_DIR)) {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
@@ -518,7 +742,7 @@ function enforceCacheLimit(maxFiles) {
   try {
     const cachedFiles = fs
       .readdirSync(CACHE_DIR)
-      .filter((name) => name.endsWith(".wav"))
+      .filter((name) => name.endsWith(".wav") || name.endsWith(".mp3"))
       .map((name) => {
         const filePath = path.join(CACHE_DIR, name);
         return {
@@ -550,12 +774,101 @@ function isPlaying() {
   return currentlyPlaying;
 }
 
+async function getMusicStatus(config) {
+  const status = {
+    enabled: isMusicConfigured(config),
+    reason: null,
+    requires: {
+      apiKey: true,
+      musicPermission: "music_generation",
+      usagePermission: "user_read",
+      player: "sox/play",
+    },
+    playback: {
+      durationMs: MUSIC_DURATION_MS,
+      outputFormat: MUSIC_OUTPUT_FORMAT,
+    },
+    stats: {
+      generatedCount: musicStats.generatedCount,
+      cacheHitCount: musicStats.cacheHitCount,
+      lastGeneratedAt: musicStats.lastGeneratedAt,
+    },
+    subscription: null,
+    recentUsage: null,
+  };
+
+  if (!status.enabled) {
+    status.reason = "Valid ElevenLabs key required";
+    return status;
+  }
+
+  const musicAccess = await getMusicAccess(config);
+  status.enabled = Boolean(musicAccess.enabled);
+  if (musicAccess.reason) {
+    status.reason = musicAccess.reason;
+  }
+  if (!status.enabled) {
+    return status;
+  }
+
+  const elevenlabs = getElevenLabsClient(config);
+
+  try {
+    const subscription = await elevenlabs.user.subscription.get();
+    const characterLimit = Number(subscription.characterLimit) || 0;
+    const characterCount = Number(subscription.characterCount) || 0;
+
+    status.subscription = {
+      tier: subscription.tier,
+      status: subscription.status,
+      characterCount,
+      characterLimit,
+      remainingCharacters: Math.max(0, characterLimit - characterCount),
+      nextResetUnix: subscription.nextCharacterCountResetUnix || null,
+    };
+  } catch (error) {
+    status.reason = getElevenLabsErrorMessage(error, { feature: "usage" });
+  }
+
+  try {
+    const now = Date.now();
+    const usage = await elevenlabs.usage.get({
+      startUnix: now - 30 * 24 * 60 * 60 * 1000,
+      endUnix: now,
+      breakdownType: "none",
+      aggregationInterval: "cumulative",
+      metric: "credits",
+    });
+
+    const usageSeries = Object.values(usage.usage || {});
+    const totals = usageSeries.flat().filter((value) => Number.isFinite(value));
+    const totalCreditsUsed = totals.length > 0 ? totals[totals.length - 1] : null;
+
+    status.recentUsage = {
+      windowDays: 30,
+      metric: "credits",
+      total: totalCreditsUsed,
+    };
+  } catch (error) {
+    if (!status.reason) {
+      status.reason = getElevenLabsErrorMessage(error, { feature: "usage" });
+    }
+  }
+
+  return status;
+}
+
 module.exports = {
   announce,
   getVoices,
   getProviders,
   getDefaultVoiceForProvider,
+  getMusicStatus,
+  isMusicConfigured,
   isPlaying,
+  playSongFile,
+  playSong,
+  prepareSong,
   normalizeProvider,
   PROVIDERS,
 };
