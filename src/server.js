@@ -1,15 +1,29 @@
 const express = require("express");
+const fs = require("fs");
 const path = require("path");
 const {
   announce,
   getVoices,
   getProviders,
   getDefaultVoiceForProvider,
+  getMusicStatus,
+  isMusicConfigured,
   isPlaying,
+  playSongFile,
   normalizeProvider,
+  prepareSong,
   PROVIDERS,
 } = require("./tts");
-const { addEntry, getHistory, getEntryById, removeEntryById } = require("./history");
+const {
+  addEntry,
+  addSongEntry,
+  getHistory,
+  getEntryById,
+  getSongEntryById,
+  getSongHistory,
+  removeEntryById,
+  removeSongEntryById,
+} = require("./history");
 const { loadConfig } = require("./config");
 
 const config = loadConfig();
@@ -17,6 +31,7 @@ const app = express();
 const MAX_SCHEDULE_DELAY_MINUTES = 60;
 const SCHEDULE_RETRY_MS = 5000;
 const SCHEDULE_MAX_RETRIES = 24;
+const MAX_SONG_PROMPT_LENGTH = 240;
 const scheduledJobs = new Map();
 
 app.use(express.json());
@@ -68,6 +83,18 @@ function parseDelayMinutes(rawDelayMinutes) {
 
 function clampVolume(rawVolume) {
   return Math.min(100, Math.max(0, parseInt(rawVolume) || 40));
+}
+
+function toSongResponse(entry) {
+  return {
+    id: entry.id,
+    prompt: entry.prompt,
+    volume: entry.volume,
+    cached: Boolean(entry.cached),
+    durationMs: entry.durationMs,
+    timestamp: entry.timestamp,
+    previewUrl: `/api/music/file/${encodeURIComponent(entry.id)}`,
+  };
 }
 
 async function runAnnouncementNow({ text, provider, voice, volume, addToHistory = true }) {
@@ -148,6 +175,37 @@ function scheduleAnnouncement({ text, provider, voice, volume }, delayMinutes) {
 
 app.get("/api/providers", (req, res) => {
   res.json(getProviders(config));
+});
+
+app.get("/api/music/status", async (req, res) => {
+  try {
+    const status = await getMusicStatus(config);
+    res.json(status);
+  } catch (err) {
+    console.error("Failed to load music status:", err);
+    res.status(500).json({ error: "Failed to load music status" });
+  }
+});
+
+app.get("/api/music/history", (req, res) => {
+  res.json({
+    history: getSongHistory().map((entry) => toSongResponse(entry)),
+  });
+});
+
+app.get("/api/music/file/:id", (req, res) => {
+  const entry = getSongEntryById(req.params.id);
+  if (!entry) {
+    return res.status(404).json({ error: "Song not found" });
+  }
+
+  if (!entry.filePath || !fs.existsSync(entry.filePath)) {
+    return res.status(410).json({ error: "Song file is no longer available" });
+  }
+
+  res.setHeader("Content-Type", "audio/mpeg");
+  res.setHeader("Cache-Control", "no-store");
+  res.sendFile(entry.filePath);
 });
 
 // Get available voices
@@ -242,6 +300,89 @@ app.post("/api/announce", async (req, res) => {
     console.error("Announcement failed:", err);
     res.status(500).json({ error: "Announcement failed: " + err.message });
   }
+});
+
+app.post("/api/music", async (req, res) => {
+  const { prompt, volume } = req.body;
+
+  if (!isMusicConfigured(config)) {
+    return res.status(400).json({ error: "Valid ElevenLabs key required for music" });
+  }
+
+  if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
+    return res.status(400).json({ error: "Song prompt is required" });
+  }
+
+  if (prompt.trim().length > MAX_SONG_PROMPT_LENGTH) {
+    return res
+      .status(400)
+      .json({ error: `Song prompt must be ${MAX_SONG_PROMPT_LENGTH} characters or less` });
+  }
+
+  try {
+    const selectedVolume = clampVolume(volume);
+    const preparedSong = await prepareSong(config, {
+      prompt: prompt.trim(),
+    });
+
+    const entry = addSongEntry({
+      prompt: preparedSong.prompt,
+      volume: selectedVolume,
+      filePath: preparedSong.filePath,
+      cached: preparedSong.cached,
+      durationMs: preparedSong.durationMs,
+    });
+
+    res.json({
+      success: true,
+      song: toSongResponse(entry),
+    });
+  } catch (err) {
+    console.error("Music generation failed:", err);
+    res.status(500).json({ error: "Music generation failed: " + err.message });
+  }
+});
+
+app.post("/api/music/replay/:id", async (req, res) => {
+  if (!isMusicConfigured(config)) {
+    return res.status(400).json({ error: "Valid ElevenLabs key required for music" });
+  }
+
+  if (isPlaying()) {
+    return res.status(409).json({ error: "Audio is already playing" });
+  }
+
+  const entry = getSongEntryById(req.params.id);
+  if (!entry) {
+    return res.status(404).json({ error: "Song not found" });
+  }
+
+  try {
+    await playSongFile(config, {
+      filePath: entry.filePath,
+      volume: clampVolume(req.body?.volume ?? entry.volume),
+    });
+
+    res.json({
+      success: true,
+      song: toSongResponse(entry),
+    });
+  } catch (err) {
+    console.error("Song replay failed:", err);
+    res.status(500).json({ error: "Song replay failed: " + err.message });
+  }
+});
+
+app.delete("/api/music/history/:id", (req, res) => {
+  const removed = removeSongEntryById(req.params.id);
+  if (!removed) {
+    return res.status(404).json({ error: "Song not found" });
+  }
+
+  res.json({
+    success: true,
+    id: removed.id,
+  });
 });
 
 // Replay an announcement directly from history

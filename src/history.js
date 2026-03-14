@@ -1,9 +1,20 @@
 const MAX_HISTORY = 50;
-const history = [];
+const announcementHistory = [];
+const songHistory = [];
+
+function createId() {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+}
+
+function trimHistory(list) {
+  if (list.length > MAX_HISTORY) {
+    list.length = MAX_HISTORY;
+  }
+}
 
 function addEntry(text, voice, volume = 40, provider = "piper") {
   const entry = {
-    id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+    id: createId(),
     text,
     voice,
     volume,
@@ -11,32 +22,70 @@ function addEntry(text, voice, volume = 40, provider = "piper") {
     timestamp: new Date().toISOString(),
   };
 
-  history.unshift(entry);
-
-  // Trim to max size
-  if (history.length > MAX_HISTORY) {
-    history.length = MAX_HISTORY;
-  }
-
+  announcementHistory.unshift(entry);
+  trimHistory(announcementHistory);
   return entry;
 }
 
 function getHistory() {
-  return history;
+  return announcementHistory;
 }
 
 function getEntryById(id) {
-  return history.find((entry) => entry.id === id);
+  return announcementHistory.find((entry) => entry.id === id);
 }
 
 function removeEntryById(id) {
-  const index = history.findIndex((entry) => entry.id === id);
+  const index = announcementHistory.findIndex((entry) => entry.id === id);
   if (index === -1) {
     return null;
   }
 
-  const [removed] = history.splice(index, 1);
+  const [removed] = announcementHistory.splice(index, 1);
   return removed;
 }
 
-module.exports = { addEntry, getHistory, getEntryById, removeEntryById };
+function addSongEntry({ prompt, volume = 40, filePath, cached = false, durationMs = 30000 }) {
+  const entry = {
+    id: createId(),
+    prompt,
+    volume,
+    filePath,
+    cached,
+    durationMs,
+    timestamp: new Date().toISOString(),
+  };
+
+  songHistory.unshift(entry);
+  trimHistory(songHistory);
+  return entry;
+}
+
+function getSongHistory() {
+  return songHistory;
+}
+
+function getSongEntryById(id) {
+  return songHistory.find((entry) => entry.id === id);
+}
+
+function removeSongEntryById(id) {
+  const index = songHistory.findIndex((entry) => entry.id === id);
+  if (index === -1) {
+    return null;
+  }
+
+  const [removed] = songHistory.splice(index, 1);
+  return removed;
+}
+
+module.exports = {
+  addEntry,
+  addSongEntry,
+  getEntryById,
+  getHistory,
+  getSongEntryById,
+  getSongHistory,
+  removeEntryById,
+  removeSongEntryById,
+};
